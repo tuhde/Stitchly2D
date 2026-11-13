@@ -1,0 +1,39 @@
+{
+    "format": "stitchly-project",
+    "version": 1,
+    "pattern": "patterns/male_shirt.sm2d",
+    "settings": {
+        "stitchType": "Garter",
+        "stitchWidthMm": 4,
+        "rowHeightMm": 3,
+        "includeSeamAllowance": false,
+        "edgeStitches": 1,
+        "increase": "m1",
+        "decrease": "k2tog_ssk"
+    },
+    "pieces": {
+        "Cuff": {
+            "bands": [
+                { "stitchType": "2:2 rib", "heightMm": 20, "overlays": [] },
+                {
+                    "stitchType": "Default stitch",
+                    "heightMm": 0,
+                    "overlays": [
+                        { "pattern": "Stripes 2 rows", "firstRow": 0, "rowCount": 6, "firstStitch": 0,
+                          "stitchCount": 0, "offsetX": 0, "offsetY": 0 }
+                    ]
+                }
+            ]
+        }
+    },
+    "catalog": {
+        "version": 1,
+        "basics": [
+            { "name": "2:2 rib", "stitchWidthMm": 3.5, "rowHeightMm": 3.5 }
+        ],
+        "patterns": [
+            { "name": "Stripes 2 rows", "kind": "color", "width": 1, "height": 4,
+              "legend": ["A", "B"], "rows": [[1], [1], [0], [0]] }
+        ]
+    }
+}

@@ -8,6 +8,7 @@ SOURCES += \
     $$PWD/catalog_dialog.cpp \
     $$PWD/core/colors.cpp \
     $$PWD/core/application_2d.cpp \
+    $$PWD/core/cli.cpp \
     $$PWD/core/pattern_loader.cpp \
     $$PWD/xml/vpattern.cpp
 
@@ -17,6 +18,7 @@ HEADERS += \
     $$PWD/core/colors.h \
     $$PWD/version.h \
     $$PWD/core/application_2d.h \
+    $$PWD/core/cli.h \
     $$PWD/core/headless_window.h \
     $$PWD/core/pattern_loader.h \
     $$PWD/xml/vpattern.h

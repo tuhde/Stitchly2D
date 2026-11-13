@@ -53,7 +53,7 @@ build/src/app/stitchly2d/bin/stitchly2d pattern.sm2d          # main window (a .
 build/src/app/stitchly2d/bin/stitchly2d --cli --stitch-width 5 --row-height 3.5 pattern.sm2d   # text only
 ```
 
-`--screenshot file.png` opens the window without a display, saves a picture and quits. `--cli` loads the pattern and its measurements the way Seamly2D does, and prints the number of rows, the cast-on and
+`--screenshot file.png` opens the window without a display, saves a picture and quits. `--cli` also accepts a `.stitchly` project: it then uses the project's stitch settings, bands and patterns (`-w`, `-r` and `--seam-allowance` override them, `--piece name` limits the output to one piece). It loads the pattern and its measurements the way Seamly2D does, and prints the number of rows, the cast-on and
 bind-off stitches and the written instructions for every piece. `--csv` prints the row table instead,
 `--seam-allowance` includes the seam allowance, `--measurements file.smis` replaces the measurement file named in the
 pattern. Pieces are turned so their grainline is vertical. `--cli` needs no display. `src/test/smoke_test.sh

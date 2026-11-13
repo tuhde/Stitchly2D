@@ -33,6 +33,7 @@
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
+#include "core/cli.h"
 #include "mcp/mcp_integration.h"
 #include "mcp/mcp_panel.h"
 #ifdef STITCHLY_HAVE_QTERMWIDGET
@@ -55,7 +56,7 @@ const QString kDefaultStitch = QString::fromLatin1(stitchcore::kDefaultStitchNam
 
 QString catalogPath()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QStringLiteral("/catalog.json");
+    return userCatalogPath();
 }
 }
 

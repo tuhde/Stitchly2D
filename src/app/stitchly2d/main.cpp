@@ -7,12 +7,10 @@
 #include <QTimer>
 
 #include "core/application_2d.h"
+#include "core/cli.h"
 #include "mainwindow.h"
 #include "core/pattern_loader.h"
 
-#include "../../libs/stitchcore/instructions.h"
-#include "../../libs/stitchcore/pieceoutline.h"
-#include "../../libs/stitchcore/stitchgrid.h"
 
 int main(int argc, char *argv[])
 {
@@ -57,7 +55,9 @@ int main(int argc, char *argv[])
     QCommandLineOption shot(QStringLiteral("screenshot"),
                             QStringLiteral("Open the window, save a picture of it to this file and quit."),
                             QStringLiteral("file"));
-    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv});
+    QCommandLineOption pieceOption(QStringLiteral("piece"), QStringLiteral("With --cli: only this piece."),
+                                   QStringLiteral("name"));
+    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption});
     parser.process(app);
 
     if (!parser.isSet(cli))
@@ -90,56 +90,18 @@ int main(int argc, char *argv[])
     QTextStream err(stderr);
     if (parser.positionalArguments().size() != 1)
     {
-        err << "--cli needs exactly one pattern file. See --help.\n";
+        err << "--cli needs exactly one pattern (.sm2d) or project (.stitchly) file. See --help.\n";
         return 2;
     }
-    stitchcore::StitchSize size;
-    size.stitchWidthMm = parser.value(stitchW).toDouble();
-    size.rowHeightMm = parser.value(rowH).toDouble();
-    if (!size.isValid())
-    {
-        err << "Stitch width and row height must be greater than 0.\n";
-        return 2;
-    }
-
-    LoadedPattern pattern;
-    QString error;
-    if (!loadPattern(parser.positionalArguments().first(), pattern, &error, parser.value(meas)))
-    {
-        err << "Could not load the pattern: " << error << "\n";
-        return 1;
-    }
-    out << "Pattern: " << pattern.fileName << "\n";
-    if (!pattern.measurementsFile.isEmpty())
-    {
-        out << "Measurements: " << pattern.measurementsFile << "\n";
-    }
-    out << pattern.pieces.size() << " piece(s), stitch " << size.stitchWidthMm << " x row " << size.rowHeightMm
-        << " mm (" << size.stitchesPer10cm() << " sts x " << size.rowsPer10cm() << " rows per 10 cm)\n";
-
-    for (const LoadedPiece &piece : pattern.pieces)
-    {
-        const QPolygonF &source = (parser.isSet(allowance) && !piece.cutLine.isEmpty()) ? piece.cutLine
-                                                                                         : piece.seamLine;
-        const stitchcore::StitchGrid grid =
-            stitchcore::StitchGrid::build(stitchcore::knittingOutline(source, piece.grainline), size);
-        out << "\n== " << piece.name << " ==\n";
-        if (grid.isEmpty())
-        {
-            out << "(no stitches)\n";
-            continue;
-        }
-        out << grid.rowCount() << " rows, cast on " << grid.castOn() << ", widest " << grid.width()
-            << ", bind off " << grid.bindOff()
-            << (piece.grainline.isNull() ? "  [no grainline: drawn orientation used]" : "") << "\n";
-        if (parser.isSet(csv))
-        {
-            out << stitchcore::rowTableCsv(grid);
-        }
-        else
-        {
-            out << stitchcore::writeInstructions(grid).join(QLatin1Char('\n')) << "\n";
-        }
-    }
-    return 0;
+    CliOptions options;
+    options.input = parser.positionalArguments().first();
+    options.measurements = parser.value(meas);
+    options.hasStitchWidth = parser.isSet(stitchW);
+    options.stitchWidthMm = parser.value(stitchW).toDouble();
+    options.hasRowHeight = parser.isSet(rowH);
+    options.rowHeightMm = parser.value(rowH).toDouble();
+    options.seamAllowance = parser.isSet(allowance);
+    options.csv = parser.isSet(csv);
+    options.piece = parser.value(pieceOption);
+    return runCli(options, out, err);
 }
