@@ -1,6 +1,6 @@
 # Stitchly2D – plan
 
-Status 2026-11-13: skeleton done. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`. `vtools` is included because `ifc` and `vwidgets` depend on it; `tools` is left out. `stitchcore` and the app come next.
+Status 2026-11-13: skeleton done; `stitchcore` (gauge, stitch grid, shaping, instructions, CSV) done with tests in `src/test/stitchcore`. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`. `vtools` is included because `ifc` and `vwidgets` depend on it; `tools` is left out. `stitchcore` and the app come next.
 
 ## Context
 Stitchly2D should take pattern files from Seamly2D (`.sm2d` + `.smis`) and prepare them for knitting. Crochet and embroidery follow later. The user wants the sources and framework close to Seamly2D so the look and feel match. The repo is empty (no commits). Seamly2D is at `/var/projects/Seamly2D`: GPLv3, qmake, Qt 6 widgets, static libs under `src/libs/*`, apps under `src/app/{seamly2d,seamlyme}`. Its branch `feature/knitting-grid` (commit 5fdd2e99c, by the same user) already adds a per-piece grid to Seamly2D. That is a good reference for grid anchoring and clipping to the seam line.
