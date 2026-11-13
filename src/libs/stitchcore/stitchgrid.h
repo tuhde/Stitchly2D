@@ -6,7 +6,7 @@
 #include <QString>
 #include <QVector>
 
-#include "stitchtype.h"
+#include "catalog.h"
 
 namespace stitchcore
 {
@@ -22,13 +22,37 @@ struct Row
     int end() const { return firstStitch + count; }
 };
 
+/** An overlay together with its pattern, as used by the grid. */
+struct ResolvedOverlay
+{
+    Overlay    overlay;
+    PatternDef pattern;
+};
+
 /** A band as it ended up in the grid. */
 struct GridBand
 {
-    QString    stitchType;
-    StitchSize size;
-    int        firstRow = 0;
-    int        rowCount = 0;
+    QString                 stitchType;
+    StitchSize              size;
+    int                     firstRow = 0;
+    int                     rowCount = 0;
+    QVector<ResolvedOverlay> overlays;
+};
+
+/** What one stitch is made of: the basic type plus whatever the overlays put on it. */
+struct Cell
+{
+    QString basic;
+    QString special;   //!< stitch symbol from a special pattern, empty if none
+    QString color;     //!< yarn color from a color pattern, empty if none
+};
+
+/** Consecutive stitches of a row with the same special symbol and color. */
+struct Run
+{
+    QString special;
+    QString color;
+    int     count = 0;
 };
 
 /**
@@ -51,6 +75,16 @@ public:
      */
     static StitchGrid build(const QPolygonF &outlineMm, const QVector<BandSpec> &bands,
                             const StitchLibrary &library);
+
+    /** Piece in bands with overlays. An overlay naming a pattern that is not in the catalog makes the result empty. */
+    static StitchGrid build(const QPolygonF &outlineMm, const QVector<BandSpec> &bands,
+                            const StitchCatalog &catalog);
+
+    /** Stitch s (counted in the band grid, see Row) of row r; basic type only if r or s is outside the piece. */
+    Cell cell(int row, int stitch) const;
+
+    /** The stitches of a row as runs. Empty if no overlay touches the row. */
+    QVector<Run> overlayRuns(int row) const;
 
     const QVector<Row> &rows() const { return m_rows; }
     const QVector<GridBand> &bands() const { return m_bands; }

@@ -17,6 +17,7 @@ OBJECTS_DIR = obj
 HEADERS += \
     stitchsize.h \
     stitchtype.h \
+    catalog.h \
     stitchgrid.h \
     shaping.h \
     instructions.h
@@ -24,6 +25,7 @@ HEADERS += \
 SOURCES += \
     stitchsize.cpp \
     stitchtype.cpp \
+    catalog.cpp \
     stitchgrid.cpp \
     shaping.cpp \
     instructions.cpp

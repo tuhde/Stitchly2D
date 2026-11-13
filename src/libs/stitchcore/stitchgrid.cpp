@@ -40,6 +40,7 @@ struct Resolved
     StitchSize size;
     qreal      y0 = 0;
     qreal      y1 = 0;
+    int        spec = 0;
 };
 }
 
@@ -53,6 +54,15 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const StitchSize &size)
 StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec> &bands,
                              const StitchLibrary &library)
 {
+    StitchCatalog catalog;
+    catalog.basics() = library;
+    return build(outlineMm, bands, catalog);
+}
+
+StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec> &bands,
+                             const StitchCatalog &catalog)
+{
+    const StitchLibrary &library = catalog.basics();
     StitchGrid grid;
     if (outlineMm.size() < 3 || bands.isEmpty())
     {
@@ -75,6 +85,7 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
         Resolved r;
         r.name = t.name;
         r.size = t.size;
+        r.spec = i;
         r.y0 = y;
         r.y1 = last ? box.bottom() : qMin(box.bottom(), y + bands.at(i).heightMm);
         res.append(r);
@@ -152,6 +163,17 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
             GridBand gb;
             gb.stitchType = res.at(original).name;
             gb.size = res.at(original).size;
+            for (const Overlay &o : bands.at(res.at(original).spec).overlays)
+            {
+                ResolvedOverlay ro;
+                ro.overlay = o;
+                ro.pattern = catalog.find(o.pattern);
+                if (ro.pattern.name.isEmpty())
+                {
+                    return StitchGrid();
+                }
+                gb.overlays.append(ro);
+            }
             gb.firstRow = i;
             grid.m_bands.append(gb);
         }
@@ -160,6 +182,70 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
         row.band = grid.m_bands.size() - 1;
     }
     return grid;
+}
+
+
+Cell StitchGrid::cell(int row, int stitch) const
+{
+    Cell c;
+    if (row < 0 || row >= m_rows.size())
+    {
+        return c;
+    }
+    const Row &r = m_rows.at(row);
+    const GridBand &b = m_bands.at(r.band);
+    c.basic = b.stitchType;
+    if (stitch < r.firstStitch || stitch >= r.end())
+    {
+        return c;
+    }
+    const int bandRow = row - b.firstRow;
+    const int x = stitch - r.firstStitch;      // counted from the first stitch of the row
+    for (const ResolvedOverlay &ro : b.overlays)
+    {
+        const Overlay &o = ro.overlay;
+        if (bandRow < o.firstRow || (o.rowCount > 0 && bandRow >= o.firstRow + o.rowCount)
+            || x < o.firstStitch || (o.stitchCount > 0 && x >= o.firstStitch + o.stitchCount))
+        {
+            continue;
+        }
+        const int idx = ro.pattern.cellAt(x - o.firstStitch + o.offsetX, bandRow - o.firstRow + o.offsetY);
+        if (idx < 0)
+        {
+            continue;
+        }
+        (ro.pattern.kind == PatternDef::Color ? c.color : c.special) = ro.pattern.legend.at(idx);
+    }
+    return c;
+}
+
+QVector<Run> StitchGrid::overlayRuns(int row) const
+{
+    QVector<Run> runs;
+    if (row < 0 || row >= m_rows.size())
+    {
+        return runs;
+    }
+    const Row &r = m_rows.at(row);
+    bool touched = false;
+    for (int s = r.firstStitch; s < r.end(); ++s)
+    {
+        const Cell c = cell(row, s);
+        touched = touched || !c.special.isEmpty() || !c.color.isEmpty();
+        if (!runs.isEmpty() && runs.last().special == c.special && runs.last().color == c.color)
+        {
+            runs.last().count++;
+        }
+        else
+        {
+            runs.append(Run{c.special, c.color, 1});
+        }
+    }
+    if (!touched)
+    {
+        runs.clear();
+    }
+    return runs;
 }
 
 }

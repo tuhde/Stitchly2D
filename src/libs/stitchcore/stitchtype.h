@@ -34,16 +34,6 @@ private:
     QVector<StitchType> m_types;
 };
 
-/**
- * One horizontal band of a piece: from the previous band (or the bottom) upwards by heightMm.
- * A heightMm <= 0 means "up to the top of the piece" and ends the list.
- */
-struct BandSpec
-{
-    QString stitchType;
-    qreal   heightMm = 0;
-};
-
 }
 
 #endif

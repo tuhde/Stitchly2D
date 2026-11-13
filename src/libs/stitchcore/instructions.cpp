@@ -27,6 +27,25 @@ QString decText(DecreaseMethod m, bool leftEdge)
     return leftEdge ? QStringLiteral("ssk") : QStringLiteral("k2tog");
 }
 
+QString runsText(const QVector<Run> &runs)
+{
+    QStringList parts;
+    for (const Run &r : runs)
+    {
+        QString label = r.color;
+        if (!r.special.isEmpty())
+        {
+            label += (label.isEmpty() ? QString() : QStringLiteral("/")) + r.special;
+        }
+        if (label.isEmpty())
+        {
+            label = QStringLiteral("-");   // base stitch, nothing laid over it
+        }
+        parts << QStringLiteral("%1 x%2").arg(label).arg(r.count);
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
 QString edge(const QString &side, int change, const ShapingOptions &o)
 {
     if (change == 0)
@@ -56,16 +75,29 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
         const int first = s.firstRow + 1;
         if (!s.shaped)
         {
-            const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(s.firstRow).band).stitchType)
-                                       : QString();
-            if (s.rows == 1)
+            // Rows with an overlay are written one by one; plain rows are grouped.
+            int blockStart = s.firstRow;
+            auto flush = [&](int endRow) {
+                const int n = endRow - blockStart;
+                if (n <= 0) return;
+                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(blockStart).band).stitchType)
+                                           : QString();
+                if (n == 1)
+                    lines << QStringLiteral("Row %1%2: work even.").arg(blockStart + 1).arg(type);
+                else
+                    lines << QStringLiteral("Rows %1-%2%3: work even.").arg(blockStart + 1).arg(endRow).arg(type);
+            };
+            for (int r = s.firstRow; r < s.firstRow + s.rows; ++r)
             {
-                lines << QStringLiteral("Row %1%2: work even.").arg(first).arg(type);
+                const QVector<Run> runs = grid.overlayRuns(r);
+                if (runs.isEmpty()) continue;
+                flush(r);
+                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(r).band).stitchType)
+                                           : QString();
+                lines << QStringLiteral("Row %1%2: %3.").arg(r + 1).arg(type).arg(runsText(runs));
+                blockStart = r + 1;
             }
-            else
-            {
-                lines << QStringLiteral("Rows %1-%2%3: work even.").arg(first).arg(first + s.rows - 1).arg(type);
-            }
+            flush(s.firstRow + s.rows);
             continue;
         }
         if (s.shaping.bandChange)
@@ -84,6 +116,11 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
                              .arg(d > 0 ? QStringLiteral("increase") : QStringLiteral("decrease"))
                              .arg(qAbs(d)).arg(s.shaping.stitchesBefore).arg(s.shaping.stitchesAfter);
             }
+            const QVector<Run> bruns = grid.overlayRuns(s.firstRow);
+            if (!bruns.isEmpty())
+            {
+                lines << QStringLiteral("    pattern: %1.").arg(runsText(bruns));
+            }
             continue;
         }
         QStringList parts;
@@ -94,6 +131,11 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
         lines << QStringLiteral("Row %1: keep %2 edge stitch(es), %3. (%4 stitches)")
                      .arg(first).arg(options.edgeStitches).arg(parts.join(QStringLiteral("; ")))
                      .arg(s.shaping.stitchesAfter);
+        const QVector<Run> eruns = grid.overlayRuns(s.firstRow);
+        if (!eruns.isEmpty())
+        {
+            lines << QStringLiteral("    pattern: %1.").arg(runsText(eruns));
+        }
     }
     lines << QStringLiteral("Bind off %1 stitches.").arg(grid.bindOff());
     return lines;
