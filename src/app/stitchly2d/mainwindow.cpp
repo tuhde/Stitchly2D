@@ -29,6 +29,8 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
+#include "catalog_dialog.h"
+#include "core/colors.h"
 #include "../../libs/stitchcore/instructions.h"
 #include "../../libs/stitchcore/pieceoutline.h"
 #include "../vwidgets/vmaingraphicsscene.h"
@@ -92,6 +94,9 @@ void MainWindow::createActions()
     {
         viewMenu->addAction(dock->toggleViewAction());
     }
+
+    QMenu *catalogMenu = menuBar()->addMenu(tr("&Catalog"));
+    catalogMenu->addAction(tr("&Edit catalog (stitches and patterns)..."), this, &MainWindow::editCatalog);
 
     QMenu *help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&About Stitchly2D"), this, &MainWindow::about);
@@ -337,22 +342,6 @@ StitchGrid MainWindow::gridFor(const LoadedPiece &piece, QPolygonF *outline) con
     const QPolygonF shape = knittingOutline(source, piece.grainline);
     if (outline) *outline = shape;
     return StitchGrid::build(shape, bandsFor(piece), workingCatalog());
-}
-
-QColor MainWindow::colorFor(const QString &name)
-{
-    const QColor named(name);
-    if (named.isValid())
-    {
-        return named;
-    }
-    static const QVector<QColor> palette = {QColor("#4e79a7"), QColor("#f28e2b"), QColor("#e15759"), QColor("#76b7b2"),
-                                            QColor("#59a14f"), QColor("#edc948"), QColor("#b07aa1"), QColor("#ff9da7")};
-    if (name.size() == 1 && name.at(0).isLetter())
-    {
-        return palette.at((name.at(0).toUpper().unicode() - 'A') % palette.size());
-    }
-    return palette.at(qHash(name) % palette.size());
 }
 
 void MainWindow::populateBandTables()
@@ -691,7 +680,7 @@ void MainWindow::showGrid(const QPolygonF &outline, const StitchGrid &grid)
     }
     for (auto it = colored.cbegin(); it != colored.cend(); ++it)
     {
-        m_scene->addPath(it.value(), Qt::NoPen, QBrush(colorFor(it.key())));
+        m_scene->addPath(it.value(), Qt::NoPen, QBrush(yarnColor(it.key())));
     }
     QPen cellPen(QColor(120, 140, 170));
     cellPen.setCosmetic(true);
@@ -743,6 +732,67 @@ void MainWindow::showGrid(const QPolygonF &outline, const StitchGrid &grid)
 
     m_scene->setSceneRect(m_scene->itemsBoundingRect().adjusted(-40, -40, 40, 40));
     fitAll();
+}
+
+void MainWindow::editCatalog()
+{
+    CatalogDialog dialog(m_catalog, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+    setCatalog(dialog.catalog());
+    QDir().mkpath(QFileInfo(catalogPath()).absolutePath());
+    if (m_catalog.save(catalogPath()))
+    {
+        statusBar()->showMessage(tr("Catalog saved"), 5000);
+    }
+    else
+    {
+        QMessageBox::warning(this, tr("Catalog"), tr("The catalog could not be saved to %1.").arg(catalogPath()));
+    }
+}
+
+void MainWindow::setCatalog(const StitchCatalog &catalog)
+{
+    m_catalog = catalog;
+
+    // Basic stitch list of the settings dock
+    const QString previous = m_stitchType->currentText();
+    m_updating = true;
+    m_stitchType->clear();
+    for (const StitchType &t : m_catalog.basics().types())
+    {
+        m_stitchType->addItem(t.name);
+    }
+    m_stitchType->addItem(kCustom);
+    const int keep = m_stitchType->findText(previous);
+    m_stitchType->setCurrentIndex(keep >= 0 ? keep : 0);
+    m_updating = false;
+    if (m_stitchType->currentText() != kCustom)
+    {
+        stitchTypeChanged();        // takes over the sizes, which may have been edited
+    }
+
+    // Bands and patterns that point at things which are gone
+    for (auto it = m_bands.begin(); it != m_bands.end(); ++it)
+    {
+        for (BandSpec &band : it.value())
+        {
+            if (band.stitchType != kDefaultStitch && !m_catalog.basics().contains(band.stitchType))
+            {
+                band.stitchType = kDefaultStitch;
+            }
+            QVector<Overlay> kept;
+            for (const Overlay &o : band.overlays)
+            {
+                if (m_catalog.contains(o.pattern)) kept.append(o);
+            }
+            band.overlays = kept;
+        }
+    }
+    populateBandTables();
+    refresh();
 }
 
 void MainWindow::fitAll()

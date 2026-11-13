@@ -8,8 +8,15 @@
 #include <QSpinBox>
 #include <QTableWidget>
 
+#include <QLineEdit>
+#include <QTabWidget>
+#include <QTemporaryDir>
+
+#include "../../app/stitchly2d/catalog_dialog.h"
 #include "../../app/stitchly2d/core/application_2d.h"
 #include "../../app/stitchly2d/mainwindow.h"
+
+using namespace stitchcore;
 
 class TstMainWindow : public QObject
 {
@@ -22,6 +29,12 @@ private slots:
     void removeBandAndOverlay();
     void bandsArePerPiece();
     void badPatternReportsError();
+    void dialogEditsBasics();
+    void dialogNewColorPattern();
+    void dialogRejectsBadInput();
+    void dialogResizeKeepsCells();
+    void dialogImportExport();
+    void setCatalogCleansUp();
 
 private:
     void select(const QString &piece);
@@ -129,6 +142,194 @@ void TstMainWindow::badPatternReportsError()
     QVERIFY(!window->openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/missing.sm2d"), &error));
     QVERIFY(!error.isEmpty());
     QCOMPARE(find<QListWidget>("piecesList")->count(), 17);          // the open pattern stays
+}
+
+void TstMainWindow::dialogEditsBasics()
+{
+    CatalogDialog dialog(StitchCatalog::withDefaults());
+    auto *table = dialog.findChild<QTableWidget *>("basicsTable");
+    const int n = table->rowCount();
+    QVERIFY(n >= 5);
+    QCOMPARE(table->item(0, 0)->text(), QString("Stockinette"));
+    qobject_cast<QDoubleSpinBox *>(table->cellWidget(0, 1))->setValue(4.25);
+    dialog.findChild<QPushButton *>("addBasicButton")->click();
+    QCOMPARE(table->rowCount(), n + 1);
+    table->item(n, 0)->setText("Moss");
+    qobject_cast<QDoubleSpinBox *>(table->cellWidget(n, 2))->setValue(2.75);
+    table->setCurrentCell(2, 0);                                  // remove "1:1 rib"
+    const QString removed = table->item(2, 0)->text();
+    dialog.findChild<QPushButton *>("removeBasicButton")->click();
+    QString error;
+    QVERIFY2(dialog.apply(&error), qPrintable(error));
+    const StitchCatalog c = dialog.catalog();
+    QCOMPARE(c.basics().find("Stockinette").size.stitchWidthMm, 4.25);
+    QCOMPARE(c.basics().find("Moss").size.rowHeightMm, 2.75);
+    QVERIFY(!c.basics().contains(removed));
+
+    // names must be filled in and unique
+    table->item(0, 0)->setText("Moss");
+    QVERIFY(!dialog.apply(&error));
+    QVERIFY(error.contains("Moss"));
+    table->item(0, 0)->setText("");
+    QVERIFY(!dialog.apply(&error));
+}
+
+void TstMainWindow::dialogNewColorPattern()
+{
+    CatalogDialog dialog(StitchCatalog::withDefaults());
+    dialog.findChild<QPushButton *>("newPatternButton")->click();
+    dialog.findChild<QLineEdit *>("patternName")->setText("Mine");
+    auto *kind = dialog.findChild<QComboBox *>("patternKind");
+    kind->setCurrentIndex(kind->findData(int(PatternDef::Color)));
+    auto *grid = dialog.findChild<QTableWidget *>("patternGrid");
+    QCOMPARE(grid->columnCount(), 2);
+    QCOMPARE(grid->rowCount(), 2);
+    grid->item(0, 0)->setText("A");      // top row of the chart = last row of the repeat
+    grid->item(0, 1)->setText("B");
+    grid->item(1, 0)->setText("B");
+    grid->item(1, 1)->setText("A");
+    QString error;
+    QVERIFY2(dialog.apply(&error), qPrintable(error));
+    const PatternDef p = dialog.catalog().find("Mine");
+    QCOMPARE(int(p.kind), int(PatternDef::Color));
+    QCOMPARE(p.legend, QStringList({"A", "B"}));
+    QCOMPARE(p.cells, QVector<int>({1, 0, 0, 1}));     // bottom row first: B A / A B
+    QVERIFY(p.isValid());
+    if (qEnvironmentVariableIsSet("STITCHLY_TEST_DIALOG_SHOT"))
+    {
+        dialog.findChild<QSpinBox *>("patternWidth")->setValue(4);
+        dialog.findChild<QSpinBox *>("patternHeight")->setValue(3);
+        for (int r = 0; r < grid->rowCount(); ++r)
+            for (int c = 0; c < grid->columnCount(); ++c)
+                grid->item(r, c)->setText((r + c) % 3 == 0 ? "MC" : ((r + c) % 3 == 1 ? "A" : "#c03030"));
+        dialog.findChild<QTabWidget *>()->setCurrentIndex(1);
+        dialog.show();
+        dialog.grab().save(qEnvironmentVariable("STITCHLY_TEST_DIALOG_SHOT"));
+        grid->item(1, 1)->setText("A");
+        grid->item(0, 0)->setText("A");
+        dialog.findChild<QSpinBox *>("patternWidth")->setValue(2);
+        dialog.findChild<QSpinBox *>("patternHeight")->setValue(2);
+        grid->item(0, 0)->setText("A");
+        grid->item(0, 1)->setText("B");
+        grid->item(1, 0)->setText("B");
+        grid->item(1, 1)->setText("A");
+    }
+    // an empty cell leaves the base stitch alone
+    grid->item(1, 1)->setText("");
+    QVERIFY(dialog.apply(&error));
+    QCOMPARE(dialog.catalog().find("Mine").cells.at(1), -1);
+}
+
+void TstMainWindow::dialogRejectsBadInput()
+{
+    CatalogDialog dialog(StitchCatalog::withDefaults());
+    dialog.findChild<QPushButton *>("newPatternButton")->click();
+    auto *name = dialog.findChild<QLineEdit *>("patternName");
+    auto *grid = dialog.findChild<QTableWidget *>("patternGrid");
+    QString error;
+    name->setText("");
+    QVERIFY(!dialog.apply(&error));
+    QVERIFY(error.contains("no name"));
+    name->setText("Seed stitch");                                  // already in the catalog
+    QVERIFY(!dialog.apply(&error));
+    QVERIFY(error.contains("Seed stitch"));
+    name->setText("Empty");
+    for (int r = 0; r < grid->rowCount(); ++r)
+        for (int c = 0; c < grid->columnCount(); ++c)
+            grid->item(r, c)->setText("");
+    QVERIFY(!dialog.apply(&error));                                // nothing in the chart
+    grid->item(0, 0)->setText("k");
+    QVERIFY(dialog.apply(&error));
+}
+
+void TstMainWindow::dialogResizeKeepsCells()
+{
+    CatalogDialog dialog(StitchCatalog::withDefaults());
+    auto *list = dialog.findChild<QListWidget *>("patternList");
+    const auto found = list->findItems("Seed stitch (special)", Qt::MatchExactly);
+    QVERIFY(!found.isEmpty());
+    list->setCurrentItem(found.first());
+    auto *grid = dialog.findChild<QTableWidget *>("patternGrid");
+    QCOMPARE(grid->columnCount(), 2);
+    // seed stitch: row 1 (bottom) = k p, row 2 (top) = p k
+    QCOMPARE(grid->item(1, 0)->text(), QString("k"));
+    QCOMPARE(grid->item(0, 0)->text(), QString("p"));
+    dialog.findChild<QSpinBox *>("patternWidth")->setValue(4);
+    dialog.findChild<QSpinBox *>("patternHeight")->setValue(3);
+    QCOMPARE(grid->columnCount(), 4);
+    QCOMPARE(grid->rowCount(), 3);
+    QCOMPARE(grid->item(2, 0)->text(), QString("k"));              // the bottom row stayed at the bottom
+    QCOMPARE(grid->item(2, 1)->text(), QString("p"));
+    QCOMPARE(grid->item(2, 3)->text(), QString(""));               // new cells are empty
+    QCOMPARE(grid->item(0, 0)->text(), QString(""));               // and the new row is on top
+    QString error;
+    QVERIFY2(dialog.apply(&error), qPrintable(error));
+    const PatternDef p = dialog.catalog().find("Seed stitch");
+    QCOMPARE(p.width, 4);
+    QCOMPARE(p.height, 3);
+    QCOMPARE(p.legend.at(p.cells.at(0)), QString("k"));            // k at the bottom left
+}
+
+void TstMainWindow::dialogImportExport()
+{
+    QTemporaryDir dir;
+    const QString file = dir.filePath("one.stpat");
+    CatalogDialog dialog(StitchCatalog::withDefaults());
+    QString error;
+    QVERIFY2(dialog.exportPatterns(file, {"Seed stitch", "Checks 2x2"}, &error), qPrintable(error));
+    QVERIFY(!dialog.exportPatterns(dir.filePath("x.stpat"), {"nope"}, &error));
+
+    ImportResult res;
+    QVERIFY2(dialog.importFile(file, ConflictPolicy::Skip, &res, &error), qPrintable(error));
+    QCOMPARE(res.skipped, 2);
+    QVERIFY2(dialog.importFile(file, ConflictPolicy::Rename, &res, &error), qPrintable(error));
+    QCOMPARE(res.renamed, 2);
+    QVERIFY(dialog.apply(&error));
+    QVERIFY(dialog.catalog().contains("Seed stitch (2)"));
+    QVERIFY2(dialog.importFile(file, ConflictPolicy::Replace, &res, &error), qPrintable(error));
+    QCOMPARE(res.replaced, 2);
+
+    // into an empty catalog: everything is added
+    StitchCatalog empty;
+    CatalogDialog fresh(empty);
+    QVERIFY2(fresh.importFile(file, ConflictPolicy::Skip, &res, &error), qPrintable(error));
+    QCOMPARE(res.added, 2);
+    QVERIFY(fresh.apply(&error));
+    QCOMPARE(fresh.catalog().find("Checks 2x2").cells, StitchCatalog::withDefaults().find("Checks 2x2").cells);
+
+    QVERIFY(!fresh.importFile(dir.filePath("missing.stpat"), ConflictPolicy::Skip, &res, &error));
+    QVERIFY(!error.isEmpty());
+}
+
+void TstMainWindow::setCatalogCleansUp()
+{
+    select("Cuff");
+    // a rib band with a stripe pattern
+    find<QPushButton>("addBandButton")->click();
+    QTableWidget *bands = find<QTableWidget>("bandTable");
+    qobject_cast<QComboBox *>(bands->cellWidget(0, 0))->setCurrentText("2:2 rib");
+    qobject_cast<QDoubleSpinBox *>(bands->cellWidget(0, 1))->setValue(20);
+    bands->selectRow(0);
+    find<QPushButton>("addOverlayButton")->click();
+    QVERIFY(window->instructionsText().contains("(2:2 rib)"));
+    QVERIFY(window->instructionsText().contains(" x"));
+
+    StitchCatalog c = window->catalog();
+    QVERIFY(c.basics().remove("2:2 rib"));
+    QVERIFY(c.remove("Seed stitch"));           // "Add pattern" put the first pattern of the catalog on the band
+    window->setCatalog(c);
+
+    QCOMPARE(qobject_cast<QComboBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 0))->currentText(),
+             QString("Default stitch"));                       // fell back
+    QCOMPARE(find<QTableWidget>("overlayTable")->rowCount(), 0);   // pattern taken off
+    const QString text = window->instructionsText();
+    QVERIFY2(!text.contains("2:2 rib"), qPrintable(text));
+    QVERIFY(!text.contains(" x"));
+
+    // changing the size of a basic stitch changes the result: 290 mm wide cuff, 4 mm stitches
+    c.basics().set({"Stockinette", StitchSize{4.0, 3.5}});
+    window->setCatalog(c);
+    QVERIFY2(window->instructionsText().contains("Cast on 73"), qPrintable(window->instructionsText()));
 }
 
 int main(int argc, char *argv[])

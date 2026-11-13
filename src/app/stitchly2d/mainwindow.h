@@ -39,12 +39,21 @@ public:
     /** Instructions of the selected piece, for tests and screenshots. */
     QString instructionsText() const;
 
+    const stitchcore::StitchCatalog &catalog() const { return m_catalog; }
+
+    /**
+     * Use a new catalog. Bands that use a basic stitch which is gone fall back to the default stitch, and patterns
+     * that are gone are taken off the bands.
+     */
+    void setCatalog(const stitchcore::StitchCatalog &catalog);
+
 protected:
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void fitAll();
+    void editCatalog();
     void openFile();
     void exportInstructions();
     void exportRowTable();
@@ -72,7 +81,6 @@ private:
     stitchcore::StitchGrid gridFor(const LoadedPiece &piece, QPolygonF *outline = nullptr) const;
     void populateBandTables();
     void populateOverlayTable();
-    static QColor colorFor(const QString &name);
     void showGrid(const QPolygonF &outline, const stitchcore::StitchGrid &grid);
     bool saveText(const QString &title, const QString &filter, const QString &suggested, const QString &text);
 
