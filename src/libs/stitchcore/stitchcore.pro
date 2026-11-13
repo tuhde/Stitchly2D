@@ -15,13 +15,13 @@ MOC_DIR = moc
 OBJECTS_DIR = obj
 
 HEADERS += \
-    gauge.h \
+    stitchsize.h \
     stitchgrid.h \
     shaping.h \
     instructions.h
 
 SOURCES += \
-    gauge.cpp \
+    stitchsize.cpp \
     stitchgrid.cpp \
     shaping.cpp \
     instructions.cpp

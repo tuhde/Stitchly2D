@@ -1,7 +1,7 @@
 # Stitchly2D
 
 Stitchly2D turns pattern files from [Seamly2D](https://github.com/FashionFreedom/Seamly2D) into something you can
-knit. You open a pattern (`.sm2d`) with its measurements (`.smis`), enter your gauge, and get a stitch chart and
+knit. You open a pattern (`.sm2d`) with its measurements (`.smis`), enter the size of one stitch, and get a stitch chart and
 written instructions for every piece. Crochet and embroidery are planned as further techniques.
 
 It is a sibling of Seamly2D, not a replacement: Seamly2D stays the drafting tool, Stitchly2D prepares the result for
@@ -14,7 +14,7 @@ yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 
 1. Draft the pattern in Seamly2D and save it (`.sm2d`, plus the `.smis` measurements it refers to).
 2. Open it in Stitchly2D. Each pattern piece appears in the pieces list.
-3. Set the gauge (stitches and rows per 10 cm or per inch) and the shaping method for a piece or the whole project.
+3. Set the size of one stitch (its width and the height of one row, both in mm) and the shaping method for a piece or the whole project. Gauges per 10 cm or per inch are calculated from it, and you can enter either form.
 4. Stitchly2D lays the piece outline over a stitch grid, with the grainline as the knitting direction. Every row gets
    a stitch count, and the changes between rows become increases and decreases.
 5. Read the result on the canvas, as written instructions, or export it as TXT, SVG, PDF, PNG or a CSV row table.
@@ -48,7 +48,7 @@ make -j$(nproc)
 | Path | Content |
 |---|---|
 | `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, ...). Kept unmodified where possible so changes can be compared with upstream. |
-| `src/libs/stitchcore/` | Knitting logic without any GUI: gauge, stitch grid, shaping (planned). |
+| `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping (planned). |
 | `src/app/stitchly2d/` | The application (planned). |
 | `docs/PLAN.md` | Design and roadmap. |
 | `NOTICE` | Which Seamly2D commit the libraries come from. |
@@ -56,7 +56,7 @@ make -j$(nproc)
 ## AI integration (planned)
 
 Like our Seamly2D fork, Stitchly2D will contain an optional Model Context Protocol server so that Claude can load a
-pattern, set the gauge, read the stitch grid and export instructions in the running window. It will be off by default,
+pattern, set the stitch size, read the stitch grid and export instructions in the running window. It will be off by default,
 listen on `127.0.0.1` only, require a token and ask before touching files.
 
 ## License

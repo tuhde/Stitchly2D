@@ -5,7 +5,7 @@
 #include <QPolygonF>
 #include <QVector>
 
-#include "gauge.h"
+#include "stitchsize.h"
 
 namespace stitchcore
 {
@@ -29,7 +29,7 @@ struct Row
 class StitchGrid
 {
 public:
-    static StitchGrid build(const QPolygonF &outlineMm, const Gauge &gauge);
+    static StitchGrid build(const QPolygonF &outlineMm, const StitchSize &size);
 
     const QVector<Row> &rows() const { return m_rows; }
     int rowCount() const { return m_rows.size(); }

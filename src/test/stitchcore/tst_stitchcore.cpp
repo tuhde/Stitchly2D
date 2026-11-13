@@ -1,6 +1,6 @@
 #include <QtTest>
 
-#include "gauge.h"
+#include "stitchsize.h"
 #include "stitchgrid.h"
 #include "shaping.h"
 #include "instructions.h"
@@ -11,8 +11,8 @@ class TstStitchCore : public QObject
 {
     Q_OBJECT
 private slots:
-    void gaugeSizes();
-    void gaugePerInch();
+    void derivedGauges();
+    void fromGauge();
     void rectangle();
     void trapezoid();
     void invalidInput();
@@ -20,20 +20,29 @@ private slots:
     void csv();
 };
 
-static Gauge g20x30() { Gauge g; g.stitchesPer10cm = 20; g.rowsPer10cm = 30; return g; }
+static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
 
-void TstStitchCore::gaugeSizes()
+void TstStitchCore::derivedGauges()
 {
-    QCOMPARE(g20x30().stitchWidthMm(), 5.0);
-    QVERIFY(qAbs(g20x30().rowHeightMm() - 100.0 / 30) < 1e-9);
-    Gauge bad; bad.stitchesPer10cm = 0;
+    const StitchSize s = g20x30();
+    QCOMPARE(s.stitchesPer10cm(), 20.0);
+    QVERIFY(qAbs(s.rowsPer10cm() - 30.0) < 1e-9);
+    QVERIFY(qAbs(s.stitchesPerInch() - 5.08) < 1e-9);
+    QVERIFY(qAbs(s.rowsPerInch() - 7.62) < 1e-9);
+    StitchSize bad; bad.stitchWidthMm = 0;
     QVERIFY(!bad.isValid());
+    QCOMPARE(bad.stitchesPer10cm(), 0.0);
 }
 
-void TstStitchCore::gaugePerInch()
+void TstStitchCore::fromGauge()
 {
-    const Gauge g = Gauge::fromPerInch(5, 7);
-    QVERIFY(qAbs(g.stitchesPer10cm - 19.685) < 0.01);
+    const StitchSize a = StitchSize::fromPer10cm(20, 25);
+    QCOMPARE(a.stitchWidthMm, 5.0);
+    QCOMPARE(a.rowHeightMm, 4.0);
+    const StitchSize b = StitchSize::fromPerInch(5, 7);
+    QVERIFY(qAbs(b.stitchWidthMm - 5.08) < 1e-9);
+    QVERIFY(qAbs(b.stitchesPer10cm() - 19.685) < 0.01);
+    QVERIFY(!StitchSize::fromPer10cm(0, 10).isValid());
 }
 
 void TstStitchCore::rectangle()
@@ -72,7 +81,7 @@ void TstStitchCore::trapezoid()
 void TstStitchCore::invalidInput()
 {
     QVERIFY(StitchGrid::build(QPolygonF(), g20x30()).isEmpty());
-    Gauge bad; bad.rowsPer10cm = 0;
+    StitchSize bad; bad.rowHeightMm = 0;
     QVERIFY(StitchGrid::build(QPolygonF({{0, 0}, {10, 0}, {10, 10}}), bad).isEmpty());
     QVERIFY(writeInstructions(StitchGrid()).isEmpty());
 }

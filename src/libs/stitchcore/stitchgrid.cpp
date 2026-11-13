@@ -36,17 +36,17 @@ bool spanAt(const QPolygonF &poly, qreal y, qreal &xmin, qreal &xmax)
 }
 }
 
-StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const Gauge &gauge)
+StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const StitchSize &size)
 {
     StitchGrid grid;
-    if (outlineMm.size() < 3 || !gauge.isValid())
+    if (outlineMm.size() < 3 || !size.isValid())
     {
         return grid;
     }
 
     const QRectF box = outlineMm.boundingRect();
-    const qreal sw = gauge.stitchWidthMm();
-    const qreal rh = gauge.rowHeightMm();
+    const qreal sw = size.stitchWidthMm;
+    const qreal rh = size.rowHeightMm;
     const int rowCount = qMax(1, qRound(box.height() / rh));
     // Spread the rows evenly over the real height so the piece is not cut short by rounding.
     const qreal step = box.height() / rowCount;
