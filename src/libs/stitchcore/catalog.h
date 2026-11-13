@@ -32,6 +32,13 @@ struct PatternDef
 
     bool isValid() const;         //!< size matches cells, indices inside the legend
     int  cellAt(int x, int y) const;   //!< repeat cell (x, y), both wrapped around the repeat
+
+    /**
+     * JSON form, shared by the catalog and pattern files. The rows are written top to bottom, the way a chart is
+     * read, although the cells are stored bottom row first.
+     */
+    QJsonObject toJson() const;
+    static bool fromJson(const QJsonObject &json, PatternDef &out, QString *error = nullptr);
 };
 
 /** Where and how a pattern is laid over a band. */

@@ -18,6 +18,7 @@ HEADERS += \
     stitchsize.h \
     stitchtype.h \
     catalog.h \
+    patternfile.h \
     stitchgrid.h \
     shaping.h \
     instructions.h
@@ -26,6 +27,7 @@ SOURCES += \
     stitchsize.cpp \
     stitchtype.cpp \
     catalog.cpp \
+    patternfile.cpp \
     stitchgrid.cpp \
     shaping.cpp \
     instructions.cpp

@@ -4,6 +4,7 @@
 #include "stitchgrid.h"
 #include "stitchtype.h"
 #include "catalog.h"
+#include "patternfile.h"
 #include "shaping.h"
 #include "instructions.h"
 
@@ -31,6 +32,10 @@ private slots:
     void overlaySpecialAndColor();
     void overlayRegionAndOffset();
     void overlayUnknownPattern();
+    void patternRowsTopFirst();
+    void fileRoundTrip();
+    void fileErrors();
+    void importPolicies();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -241,7 +246,7 @@ void TstStitchCore::catalogJson()
     QJsonObject badCell = c.toJson();
     QJsonArray pats = badCell["patterns"].toArray();
     QJsonObject p0 = pats[0].toObject();
-    p0["cells"] = QJsonArray{9, 9, 9, 9};
+    p0["rows"] = QJsonArray{QJsonArray{9, 9}, QJsonArray{9, 9}};
     pats[0] = p0;
     badCell["patterns"] = pats;
     QVERIFY(!StitchCatalog::fromJson(badCell, loaded));
@@ -315,6 +320,119 @@ void TstStitchCore::overlayUnknownPattern()
 {
     BandSpec band; band.stitchType = "Stockinette"; band.overlays.append(Overlay{"nope"});
     QVERIFY(StitchGrid::build(rect(100, 70), {band}, StitchCatalog::withDefaults()).isEmpty());
+}
+
+void TstStitchCore::patternRowsTopFirst()
+{
+    PatternDef p;
+    p.name = "t"; p.width = 2; p.height = 3; p.legend = {"a", "b", "c"};
+    p.cells = {0, 0,     // bottom row (y = 0)
+               1, 1,
+               2, -1};   // top row
+    QVERIFY(p.isValid());
+    const QJsonArray rows = p.toJson()["rows"].toArray();
+    QCOMPARE(rows.size(), 3);
+    QCOMPARE(rows.at(0).toArray().at(0).toInt(), 2);    // first row in the file = top row
+    QCOMPARE(rows.at(0).toArray().at(1).toInt(), -1);
+    QCOMPARE(rows.at(2).toArray().at(0).toInt(), 0);
+    PatternDef back;
+    QVERIFY(PatternDef::fromJson(p.toJson(), back));
+    QCOMPARE(back.cells, p.cells);
+}
+
+void TstStitchCore::fileRoundTrip()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath("set.stpat");
+    const StitchCatalog c = StitchCatalog::withDefaults();
+    PatternFileInfo info; info.author = "Tester"; info.description = "starter set";
+    QVERIFY(exportPatterns(path, c.patterns(), info));
+
+    QVector<PatternDef> back;
+    PatternFileInfo backInfo;
+    QString err;
+    QVERIFY2(importPatterns(path, back, &backInfo, &err), qPrintable(err));
+    QCOMPARE(back.size(), c.patterns().size());
+    QCOMPARE(backInfo.author, QString("Tester"));
+    QCOMPARE(backInfo.description, QString("starter set"));
+    for (int i = 0; i < back.size(); ++i)
+    {
+        QCOMPARE(back.at(i).name, c.patterns().at(i).name);
+        QCOMPARE(back.at(i).cells, c.patterns().at(i).cells);
+        QCOMPARE(int(back.at(i).kind), int(c.patterns().at(i).kind));
+    }
+    // a single pattern works too, and the file is plain JSON
+    QVERIFY(exportPatterns(dir.filePath("one.stpat"), {c.find("Seed stitch")}));
+    QFile f(dir.filePath("one.stpat")); QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(QJsonDocument::fromJson(f.readAll()).isObject());
+    QCOMPARE(QString(kPatternFileExtension), QString("stpat"));
+}
+
+static QString writeText(const QTemporaryDir &dir, const QString &name, const QByteArray &data)
+{
+    const QString path = dir.filePath(name);
+    QFile f(path); f.open(QIODevice::WriteOnly); f.write(data);
+    return path;
+}
+
+void TstStitchCore::fileErrors()
+{
+    QTemporaryDir dir;
+    QVector<PatternDef> out; QString err;
+    QVERIFY(!importPatterns(dir.filePath("missing.stpat"), out, nullptr, &err));
+    QVERIFY(!err.isEmpty());
+    QVERIFY(!importPatterns(writeText(dir, "a", "not json"), out, nullptr, &err));
+    QVERIFY(!importPatterns(writeText(dir, "b", R"({"format":"other","version":1,"patterns":[]})"), out, nullptr, &err));
+    QVERIFY(!importPatterns(writeText(dir, "c", R"({"format":"stitchly-patterns","version":99,"patterns":[{}]})"), out, nullptr, &err));
+    QVERIFY(err.contains("newer"));
+    QVERIFY(!importPatterns(writeText(dir, "d", R"({"format":"stitchly-patterns","version":1,"patterns":[]})"), out, nullptr, &err));
+    const QByteArray ragged = R"({"format":"stitchly-patterns","version":1,"patterns":[
+        {"name":"r","kind":"special","width":2,"height":2,"legend":["k","p"],"rows":[[0,1],[0]]}]})";
+    QVERIFY(!importPatterns(writeText(dir, "e", ragged), out, nullptr, &err));
+    QVERIFY(err.contains("row 2"));
+    const QByteArray badIndex = R"({"format":"stitchly-patterns","version":1,"patterns":[
+        {"name":"r","kind":"color","width":1,"height":1,"legend":["A"],"rows":[[5]]}]})";
+    QVERIFY(!importPatterns(writeText(dir, "f", badIndex), out, nullptr, &err));
+    const QByteArray dup = R"({"format":"stitchly-patterns","version":1,"patterns":[
+        {"name":"r","kind":"color","width":1,"height":1,"legend":["A"],"rows":[[0]]},
+        {"name":"r","kind":"color","width":1,"height":1,"legend":["A"],"rows":[[0]]}]})";
+    QVERIFY(!importPatterns(writeText(dir, "g", dup), out, nullptr, &err));
+    QVERIFY(err.contains("two patterns"));
+    QVERIFY(out.isEmpty());      // failed imports leave the output alone
+    // export refuses empty, invalid and duplicate input
+    QVERIFY(!exportPatterns(dir.filePath("x.stpat"), {}));
+    PatternDef bad; bad.name = "bad";
+    QVERIFY(!exportPatterns(dir.filePath("x.stpat"), {bad}));
+    const PatternDef ok = StitchCatalog::withDefaults().find("Seed stitch");
+    QVERIFY(!exportPatterns(dir.filePath("x.stpat"), {ok, ok}));
+    QVERIFY(!QFile::exists(dir.filePath("x.stpat")));
+}
+
+void TstStitchCore::importPolicies()
+{
+    const StitchCatalog base = StitchCatalog::withDefaults();
+    PatternDef seed = base.find("Seed stitch");
+    seed.legend = {"K", "P"};                         // same name, different content
+    PatternDef fresh = seed; fresh.name = "Fresh";
+
+    StitchCatalog c = base;
+    ImportResult r = addToCatalog(c, {seed, fresh}, ConflictPolicy::Skip);
+    QCOMPARE(r.added, 1); QCOMPARE(r.skipped, 1);
+    QCOMPARE(c.find("Seed stitch").legend.first(), QString("k"));
+
+    c = base;
+    r = addToCatalog(c, {seed, fresh}, ConflictPolicy::Replace);
+    QCOMPARE(r.replaced, 1); QCOMPARE(r.added, 1);
+    QCOMPARE(c.find("Seed stitch").legend.first(), QString("K"));
+    QCOMPARE(c.patterns().size(), base.patterns().size() + 1);
+
+    c = base;
+    r = addToCatalog(c, {seed}, ConflictPolicy::Rename);
+    QCOMPARE(r.renamed, 1); QCOMPARE(r.added, 1);
+    QVERIFY(c.contains("Seed stitch (2)"));
+    r = addToCatalog(c, {seed}, ConflictPolicy::Rename);
+    QVERIFY(c.contains("Seed stitch (3)"));            // no clash with the first rename
+    QCOMPARE(c.find("Seed stitch").legend.first(), QString("k"));
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

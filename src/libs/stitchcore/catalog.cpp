@@ -35,6 +35,82 @@ int PatternDef::cellAt(int x, int y) const
     return cells.at(cy * width + cx);
 }
 
+QJsonObject PatternDef::toJson() const
+{
+    QJsonArray rows;
+    for (int y = height - 1; y >= 0; --y)      // top row first
+    {
+        QJsonArray row;
+        for (int x = 0; x < width; ++x)
+        {
+            row.append(cells.value(y * width + x, -1));
+        }
+        rows.append(row);
+    }
+    return QJsonObject{{"name", name},
+                       {"kind", kind == Color ? "color" : "special"},
+                       {"width", width},
+                       {"height", height},
+                       {"legend", QJsonArray::fromStringList(legend)},
+                       {"rows", rows}};
+}
+
+bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
+{
+    auto fail = [error](const QString &msg) {
+        if (error) *error = msg;
+        return false;
+    };
+    PatternDef p;
+    p.name = o.value("name").toString();
+    if (p.name.isEmpty())
+    {
+        return fail(QStringLiteral("pattern without a name"));
+    }
+    const QString kind = o.value("kind").toString();
+    if (kind != QLatin1String("color") && kind != QLatin1String("special"))
+    {
+        return fail(QStringLiteral("%1: kind must be \"special\" or \"color\"").arg(p.name));
+    }
+    p.kind = kind == QLatin1String("color") ? Color : Special;
+    p.width = o.value("width").toInt();
+    p.height = o.value("height").toInt();
+    for (const QJsonValue &l : o.value("legend").toArray())
+    {
+        if (!l.isString())
+        {
+            return fail(QStringLiteral("%1: legend entries must be strings").arg(p.name));
+        }
+        p.legend << l.toString();
+    }
+    const QJsonArray rows = o.value("rows").toArray();
+    if (p.width < 1 || p.height < 1 || rows.size() != p.height)
+    {
+        return fail(QStringLiteral("%1: size does not match the rows").arg(p.name));
+    }
+    p.cells.fill(-1, p.width * p.height);
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        const QJsonArray row = rows.at(i).toArray();
+        if (row.size() != p.width)
+        {
+            return fail(QStringLiteral("%1: row %2 has %3 cells, expected %4")
+                            .arg(p.name).arg(i + 1).arg(row.size()).arg(p.width));
+        }
+        const int y = p.height - 1 - i;        // first row in the file is the top row
+        for (int x = 0; x < p.width; ++x)
+        {
+            p.cells[y * p.width + x] = row.at(x).toInt(-2);
+        }
+    }
+    if (!p.isValid())
+    {
+        return fail(QStringLiteral("%1: a cell refers to a legend entry that does not exist").arg(p.name));
+    }
+    out = p;
+    return true;
+}
+
 StitchCatalog StitchCatalog::withDefaults()
 {
     StitchCatalog c;
@@ -144,14 +220,7 @@ QJsonObject StitchCatalog::toJson() const
     QJsonArray patterns;
     for (const PatternDef &p : m_patterns)
     {
-        QJsonArray cells;
-        for (int c : p.cells) cells.append(c);
-        patterns.append(QJsonObject{{"name", p.name},
-                                    {"kind", p.kind == PatternDef::Color ? "color" : "special"},
-                                    {"width", p.width},
-                                    {"height", p.height},
-                                    {"legend", QJsonArray::fromStringList(p.legend)},
-                                    {"cells", cells}});
+        patterns.append(p.toJson());
     }
     return QJsonObject{{"version", 1}, {"basics", basics}, {"patterns", patterns}};
 }
@@ -178,20 +247,8 @@ bool StitchCatalog::fromJson(const QJsonObject &json, StitchCatalog &out)
     }
     for (const QJsonValue &v : json.value("patterns").toArray())
     {
-        const QJsonObject o = v.toObject();
         PatternDef p;
-        p.name = o.value("name").toString();
-        const QString kind = o.value("kind").toString();
-        if (kind != QLatin1String("color") && kind != QLatin1String("special"))
-        {
-            return false;
-        }
-        p.kind = kind == QLatin1String("color") ? PatternDef::Color : PatternDef::Special;
-        p.width = o.value("width").toInt();
-        p.height = o.value("height").toInt();
-        for (const QJsonValue &l : o.value("legend").toArray()) p.legend << l.toString();
-        for (const QJsonValue &cv : o.value("cells").toArray()) p.cells.append(cv.toInt(-2));
-        if (!c.set(p))
+        if (!PatternDef::fromJson(v.toObject(), p) || !c.set(p))
         {
             return false;
         }

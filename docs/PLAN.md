@@ -28,6 +28,7 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
   - **special patterns** (`PatternDef`, kind Special): repeat charts of stitch symbols (seed stitch, cables, ...);
   - **color patterns** (`PatternDef`, kind Color): repeat charts of yarn colors (stripes, checks, fair isle, ...).
   The shipped defaults are starting guesses; users measure their own swatches.
+- Pattern file format `.stpat` for import and export of special and color patterns: JSON, one or several patterns per file, rows written top row first, versioned, validated as a whole before anything is added (`patternfile.h`, documented in `docs/PATTERN_FILE_FORMAT.md`). Import into the catalog can skip, replace or rename on name clashes. Later: import of a color chart from an image (one pixel per stitch).
 - `BandSpec`: a piece is split into horizontal bands along the knitting direction (for example a rib hem, then stockinette). Each band names a basic stitch type, a height in mm (the last band reaches the top) and a list of `Overlay`s. Width and row height are constant inside a band. Stitch positions are only comparable inside a band. At a band change only the stitch count carries over, so the planner emits a "change stitch type and adjust N stitches evenly" step instead of edge shaping.
 - `Overlay`: lays a catalog pattern over a region of a band (band-local rows, stitches counted from the first stitch of each row so it follows shaped edges), with an offset into the repeat. A special and a color overlay can cover the same stitches; later overlays of the same kind win. `StitchGrid::cell(row, stitch)` gives the resulting basic type, symbol and color; `overlayRuns(row)` gives the runs used in the written instructions and later in the chart. Overlays do not change the stitch size. Later: size factors for patterns that pull the fabric in (cables).
 - `PieceOutline`: the piece polygon in mm, rotated so the grainline is vertical (grainline = knitting direction).
@@ -38,7 +39,7 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 
 ### 4. GUI (first version)
 - File menu: open pattern (`.sm2d`) and the linked measurements. Recent files, like Seamly2D.
-- Pieces dock: list of pieces with checkboxes. Properties dock (`vpropertyexplorer`): the bands of the piece with their basic type and overlays, a catalog editor (basic types, special and color patterns, import/export as JSON), technique, shaping method, seam allowance on or off, edge stitches.
+- Pieces dock: list of pieces with checkboxes. Properties dock (`vpropertyexplorer`): the bands of the piece with their basic type and overlays, a catalog editor (basic types, special and color patterns, import/export as `.stpat`), technique, shaping method, seam allowance on or off, edge stitches.
 - Canvas: piece outline with the stitch grid overlay and the row/stitch count, modelled on `VGridItem` from the `feature/knitting-grid` branch.
 - Instructions tab: written pattern per piece (text, copyable).
 - Export: instructions as TXT, chart as SVG, PDF, PNG, and a CSV of the row table. Reuse `SvgGenerator` and Qt's PDF engine.
