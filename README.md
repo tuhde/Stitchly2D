@@ -8,8 +8,9 @@ It is a sibling of Seamly2D, not a replacement: Seamly2D stays the drafting tool
 yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 
 > **Status: early development.** The knitting engine, the pattern loader and a first main window work: open a
-> pattern, pick a basic stitch or enter the stitch width and row height, and see the stitch grid and written
-> instructions per piece. Bands, overlays and the catalog editor are not in the window yet (the engine has them).
+> pattern, pick a basic stitch or enter the stitch width and row height, split a piece into bands with their own
+> stitch, lay special stitch and color patterns over them, and see the stitch grid and written instructions per
+> piece. There is no catalog editor yet and bands and patterns are not saved with a project yet.
 > See [docs/PLAN.md](docs/PLAN.md).
 
 ## How it will work

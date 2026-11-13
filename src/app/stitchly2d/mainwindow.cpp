@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QGraphicsSimpleTextItem>
 #include <QImage>
 #include <QLabel>
@@ -15,12 +16,15 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
+#include <QHeaderView>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSaveFile>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QShowEvent>
 #include <QStatusBar>
+#include <QTableWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -36,6 +40,7 @@ namespace
 {
 const qreal kScale = 4.0;           // scene units per millimetre
 const QString kCustom = QStringLiteral("Custom");
+const QString kDefaultStitch = QStringLiteral("Default stitch");   // the stitch settings dock, usable as a band's type
 
 QString catalogPath()
 {
@@ -104,6 +109,7 @@ void MainWindow::createDocks()
 {
     // Pieces
     m_pieces = new QListWidget;
+    m_pieces->setObjectName(QStringLiteral("piecesList"));
     connect(m_pieces, &QListWidget::currentRowChanged, this, &MainWindow::pieceChanged);
     auto *piecesDock = new QDockWidget(tr("Pieces"), this);
     piecesDock->setObjectName(QStringLiteral("piecesDock"));
@@ -166,6 +172,55 @@ void MainWindow::createDocks()
     settingsDock->setWidget(panel);
     addDockWidget(Qt::RightDockWidgetArea, settingsDock);
 
+    // Bands and overlays of the selected piece
+    auto *bandsPanel = new QWidget;
+    auto *bandsLayout = new QVBoxLayout(bandsPanel);
+    bandsLayout->addWidget(new QLabel(tr("Bands, from the bottom of the piece. The last band reaches the top.")));
+    m_bandTable = new QTableWidget(0, 2);
+    m_bandTable->setObjectName(QStringLiteral("bandTable"));
+    m_bandTable->setHorizontalHeaderLabels({tr("Stitch"), tr("Height")});
+    m_bandTable->horizontalHeader()->setStretchLastSection(true);
+    m_bandTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_bandTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_bandTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    bandsLayout->addWidget(m_bandTable);
+    auto *bandButtons = new QHBoxLayout;
+    auto *addBandButton = new QPushButton(tr("Add band"));
+    addBandButton->setObjectName(QStringLiteral("addBandButton"));
+    m_removeBand = new QPushButton(tr("Remove band"));
+    m_removeBand->setObjectName(QStringLiteral("removeBandButton"));
+    bandButtons->addWidget(addBandButton);
+    bandButtons->addWidget(m_removeBand);
+    bandsLayout->addLayout(bandButtons);
+    bandsLayout->addWidget(new QLabel(tr("Patterns laid over the selected band (special stitch or color):")));
+    m_overlayTable = new QTableWidget(0, 7);
+    m_overlayTable->setObjectName(QStringLiteral("overlayTable"));
+    m_overlayTable->setHorizontalHeaderLabels({tr("Pattern"), tr("First row"), tr("Rows"), tr("First stitch"),
+                                               tr("Stitches"), tr("Shift x"), tr("Shift y")});
+    m_overlayTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_overlayTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_overlayTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    bandsLayout->addWidget(m_overlayTable);
+    auto *overlayButtons = new QHBoxLayout;
+    m_addOverlay = new QPushButton(tr("Add pattern"));
+    m_addOverlay->setObjectName(QStringLiteral("addOverlayButton"));
+    m_removeOverlay = new QPushButton(tr("Remove pattern"));
+    m_removeOverlay->setObjectName(QStringLiteral("removeOverlayButton"));
+    overlayButtons->addWidget(m_addOverlay);
+    overlayButtons->addWidget(m_removeOverlay);
+    bandsLayout->addLayout(overlayButtons);
+    auto *bandsDock = new QDockWidget(tr("Bands and patterns"), this);
+    bandsDock->setObjectName(QStringLiteral("bandsDock"));
+    bandsDock->setWidget(bandsPanel);
+    addDockWidget(Qt::RightDockWidgetArea, bandsDock);
+    tabifyDockWidget(settingsDock, bandsDock);
+    settingsDock->raise();
+    connect(addBandButton, &QPushButton::clicked, this, &MainWindow::addBand);
+    connect(m_removeBand, &QPushButton::clicked, this, &MainWindow::removeBand);
+    connect(m_addOverlay, &QPushButton::clicked, this, &MainWindow::addOverlay);
+    connect(m_removeOverlay, &QPushButton::clicked, this, &MainWindow::removeOverlay);
+    connect(m_bandTable, &QTableWidget::itemSelectionChanged, this, &MainWindow::bandSelected);
+
     // Instructions
     m_instructions = new QPlainTextEdit;
     m_instructions->setReadOnly(true);
@@ -214,6 +269,7 @@ bool MainWindow::openPattern(const QString &fileName, QString *error)
         return false;
     }
     m_pattern = loaded;
+    m_bands.clear();
     m_updating = true;
     m_pieces->clear();
     for (const LoadedPiece &p : m_pattern.pieces)
@@ -227,6 +283,7 @@ bool MainWindow::openPattern(const QString &fileName, QString *error)
     {
         m_pieces->setCurrentRow(0);
     }
+    populateBandTables();
     refresh();
     return true;
 }
@@ -250,8 +307,260 @@ void MainWindow::pieceChanged()
 {
     if (!m_updating)
     {
+        populateBandTables();
         refresh();
     }
+}
+
+QVector<BandSpec> MainWindow::bandsFor(const LoadedPiece &piece) const
+{
+    const auto it = m_bands.constFind(piece.name);
+    if (it != m_bands.constEnd() && !it.value().isEmpty())
+    {
+        return it.value();
+    }
+    BandSpec def;
+    def.stitchType = kDefaultStitch;
+    return {def};
+}
+
+StitchCatalog MainWindow::workingCatalog() const
+{
+    StitchCatalog c = m_catalog;
+    c.basics().set({kDefaultStitch, currentSize()});
+    return c;
+}
+
+StitchGrid MainWindow::gridFor(const LoadedPiece &piece, QPolygonF *outline) const
+{
+    const QPolygonF &source = (m_allowance->isChecked() && !piece.cutLine.isEmpty()) ? piece.cutLine : piece.seamLine;
+    const QPolygonF shape = knittingOutline(source, piece.grainline);
+    if (outline) *outline = shape;
+    return StitchGrid::build(shape, bandsFor(piece), workingCatalog());
+}
+
+QColor MainWindow::colorFor(const QString &name)
+{
+    const QColor named(name);
+    if (named.isValid())
+    {
+        return named;
+    }
+    static const QVector<QColor> palette = {QColor("#4e79a7"), QColor("#f28e2b"), QColor("#e15759"), QColor("#76b7b2"),
+                                            QColor("#59a14f"), QColor("#edc948"), QColor("#b07aa1"), QColor("#ff9da7")};
+    if (name.size() == 1 && name.at(0).isLetter())
+    {
+        return palette.at((name.at(0).toUpper().unicode() - 'A') % palette.size());
+    }
+    return palette.at(qHash(name) % palette.size());
+}
+
+void MainWindow::populateBandTables()
+{
+    const bool was = m_updating;
+    m_updating = true;
+    const int selected = qMax(0, m_bandTable->currentRow());
+    m_bandTable->setRowCount(0);
+    const int index = m_pieces->currentRow();
+    if (index >= 0 && index < m_pattern.pieces.size())
+    {
+        QStringList types{kDefaultStitch};
+        for (const StitchType &t : m_catalog.basics().types()) types << t.name;
+        const QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+        m_bandTable->setRowCount(bands.size());
+        for (int r = 0; r < bands.size(); ++r)
+        {
+            auto *combo = new QComboBox;
+            combo->addItems(types);
+            combo->setCurrentText(bands.at(r).stitchType);
+            connect(combo, &QComboBox::currentIndexChanged, this, &MainWindow::commitBands);
+            m_bandTable->setCellWidget(r, 0, combo);
+            auto *height = new QDoubleSpinBox;
+            height->setRange(0, 5000);
+            height->setDecimals(1);
+            height->setSuffix(tr(" mm"));
+            height->setValue(r == bands.size() - 1 ? 0 : bands.at(r).heightMm);
+            height->setEnabled(r != bands.size() - 1);
+            height->setSpecialValueText(tr("to the top"));
+            connect(height, &QDoubleSpinBox::valueChanged, this, &MainWindow::commitBands);
+            m_bandTable->setCellWidget(r, 1, height);
+        }
+        if (bands.size() > 0)
+        {
+            m_bandTable->selectRow(qMin(selected, bands.size() - 1));
+        }
+    }
+    m_updating = was;
+    populateOverlayTable();
+}
+
+void MainWindow::populateOverlayTable()
+{
+    const bool was = m_updating;
+    m_updating = true;
+    m_overlayTable->setRowCount(0);
+    const int index = m_pieces->currentRow();
+    const int band = m_bandTable->currentRow();
+    const bool have = index >= 0 && index < m_pattern.pieces.size() && band >= 0;
+    m_addOverlay->setEnabled(have);
+    m_removeBand->setEnabled(have && m_bandTable->rowCount() > 1);
+    m_removeOverlay->setEnabled(false);
+    if (have)
+    {
+        const QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+        if (band < bands.size())
+        {
+            const QVector<Overlay> overlays = bands.at(band).overlays;
+            m_overlayTable->setRowCount(overlays.size());
+            m_removeOverlay->setEnabled(!overlays.isEmpty());
+            for (int r = 0; r < overlays.size(); ++r)
+            {
+                const Overlay &o = overlays.at(r);
+                auto *combo = new QComboBox;
+                for (const PatternDef &p : m_catalog.patterns())
+                {
+                    combo->addItem(QStringLiteral("%1 (%2)").arg(p.name, p.kind == PatternDef::Color ? tr("color")
+                                                                                                      : tr("special")),
+                                   p.name);
+                }
+                combo->setCurrentIndex(qMax(0, combo->findData(o.pattern)));
+                connect(combo, &QComboBox::currentIndexChanged, this, &MainWindow::commitBands);
+                m_overlayTable->setCellWidget(r, 0, combo);
+                const int values[6] = {o.firstRow, o.rowCount, o.firstStitch, o.stitchCount, o.offsetX, o.offsetY};
+                for (int c = 0; c < 6; ++c)
+                {
+                    auto *spin = new QSpinBox;
+                    spin->setRange(c >= 4 ? -1000 : 0, 10000);
+                    if (c == 1 || c == 3) spin->setSpecialValueText(tr("all"));
+                    spin->setValue(values[c]);
+                    connect(spin, &QSpinBox::valueChanged, this, &MainWindow::commitBands);
+                    m_overlayTable->setCellWidget(r, c + 1, spin);
+                }
+            }
+            m_overlayTable->resizeColumnsToContents();
+        }
+    }
+    m_updating = was;
+}
+
+void MainWindow::bandSelected()
+{
+    if (!m_updating)
+    {
+        populateOverlayTable();
+    }
+}
+
+void MainWindow::commitBands()
+{
+    const int index = m_pieces->currentRow();
+    if (m_updating || index < 0 || index >= m_pattern.pieces.size())
+    {
+        return;
+    }
+    const QString name = m_pattern.pieces.at(index).name;
+    QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+    for (int r = 0; r < m_bandTable->rowCount() && r < bands.size(); ++r)
+    {
+        bands[r].stitchType = qobject_cast<QComboBox *>(m_bandTable->cellWidget(r, 0))->currentText();
+        bands[r].heightMm = qobject_cast<QDoubleSpinBox *>(m_bandTable->cellWidget(r, 1))->value();
+    }
+    const int band = m_bandTable->currentRow();
+    if (band >= 0 && band < bands.size())
+    {
+        QVector<Overlay> overlays;
+        for (int r = 0; r < m_overlayTable->rowCount(); ++r)
+        {
+            Overlay o;
+            o.pattern = qobject_cast<QComboBox *>(m_overlayTable->cellWidget(r, 0))->currentData().toString();
+            int *fields[6] = {&o.firstRow, &o.rowCount, &o.firstStitch, &o.stitchCount, &o.offsetX, &o.offsetY};
+            for (int c = 0; c < 6; ++c)
+            {
+                *fields[c] = qobject_cast<QSpinBox *>(m_overlayTable->cellWidget(r, c + 1))->value();
+            }
+            overlays.append(o);
+        }
+        bands[band].overlays = overlays;
+    }
+    m_bands.insert(name, bands);
+    refresh();
+}
+
+void MainWindow::addBand()
+{
+    const int index = m_pieces->currentRow();
+    if (index < 0 || index >= m_pattern.pieces.size())
+    {
+        return;
+    }
+    QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+    if (bands.last().heightMm <= 0)
+    {
+        bands.last().heightMm = 50;     // the old last band now ends somewhere
+    }
+    BandSpec band;
+    band.stitchType = kDefaultStitch;
+    bands.append(band);
+    m_bands.insert(m_pattern.pieces.at(index).name, bands);
+    populateBandTables();
+    m_bandTable->selectRow(bands.size() - 1);
+    refresh();
+}
+
+void MainWindow::removeBand()
+{
+    const int index = m_pieces->currentRow();
+    const int band = m_bandTable->currentRow();
+    if (index < 0 || index >= m_pattern.pieces.size() || band < 0)
+    {
+        return;
+    }
+    QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+    if (bands.size() <= 1)
+    {
+        return;
+    }
+    bands.removeAt(band);
+    bands.last().heightMm = 0;
+    m_bands.insert(m_pattern.pieces.at(index).name, bands);
+    populateBandTables();
+    refresh();
+}
+
+void MainWindow::addOverlay()
+{
+    const int index = m_pieces->currentRow();
+    const int band = m_bandTable->currentRow();
+    if (index < 0 || index >= m_pattern.pieces.size() || band < 0 || m_catalog.patterns().isEmpty())
+    {
+        return;
+    }
+    QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+    Overlay o;
+    o.pattern = m_catalog.patterns().first().name;
+    bands[band].overlays.append(o);
+    m_bands.insert(m_pattern.pieces.at(index).name, bands);
+    populateOverlayTable();
+    refresh();
+}
+
+void MainWindow::removeOverlay()
+{
+    const int index = m_pieces->currentRow();
+    const int band = m_bandTable->currentRow();
+    const int row = m_overlayTable->currentRow() >= 0 ? m_overlayTable->currentRow() : m_overlayTable->rowCount() - 1;
+    if (index < 0 || index >= m_pattern.pieces.size() || band < 0 || row < 0)
+    {
+        return;
+    }
+    QVector<BandSpec> bands = bandsFor(m_pattern.pieces.at(index));
+    if (row < bands[band].overlays.size())
+    {
+        bands[band].overlays.removeAt(row);
+    }
+    m_bands.insert(m_pattern.pieces.at(index).name, bands);
+    populateOverlayTable();
+    refresh();
 }
 
 void MainWindow::stitchTypeChanged()
@@ -317,13 +626,12 @@ void MainWindow::refresh()
         return;
     }
     const LoadedPiece &piece = m_pattern.pieces.at(index);
-    const QPolygonF &source = (m_allowance->isChecked() && !piece.cutLine.isEmpty()) ? piece.cutLine : piece.seamLine;
-    const QPolygonF outline = knittingOutline(source, piece.grainline);
-    m_grid = StitchGrid::build(outline, size);
+    QPolygonF outline;
+    m_grid = gridFor(piece, &outline);
 
     if (m_grid.isEmpty())
     {
-        m_stats->setText(tr("No stitches"));
+        m_stats->setText(tr("No stitches (check the stitch types and patterns of the bands)"));
         return;
     }
     const QRectF box = outline.boundingRect();
@@ -354,11 +662,59 @@ void MainWindow::showGrid(const QPolygonF &outline, const StitchGrid &grid)
             cells.lineTo(sx(x0 + s * sw), sy(row.y0Mm));
         }
     }
+    // Colors and stitch symbols from overlays
+    QHash<QString, QPainterPath> colored;
+    QPainterPath purls;
+    bool overlays = false;
+    for (const GridBand &b : grid.bands()) overlays = overlays || !b.overlays.isEmpty();
+    if (overlays)
+    {
+        for (const Row &row : grid.rows())
+        {
+            const GridBand &band = grid.bands().at(row.band);
+            const qreal sw = band.size.stitchWidthMm;
+            const qreal x0 = band.xOriginMm + row.firstStitch * sw;
+            for (int s = 0; s < row.count; ++s)
+            {
+                const Cell c = grid.cell(row.index, row.firstStitch + s);
+                const QRectF r(QPointF(sx(x0 + s * sw), sy(row.y1Mm)), QPointF(sx(x0 + (s + 1) * sw), sy(row.y0Mm)));
+                if (!c.color.isEmpty())
+                {
+                    colored[c.color].addRect(r);
+                }
+                if (c.special == QLatin1String("p"))
+                {
+                    purls.addEllipse(r.center(), r.width() * 0.18, r.width() * 0.18);
+                }
+            }
+        }
+    }
+    for (auto it = colored.cbegin(); it != colored.cend(); ++it)
+    {
+        m_scene->addPath(it.value(), Qt::NoPen, QBrush(colorFor(it.key())));
+    }
     QPen cellPen(QColor(120, 140, 170));
     cellPen.setCosmetic(true);
     cellPen.setWidthF(0.6);
-    QPainterPath cellPath = cells;
-    m_scene->addPath(cellPath, cellPen, QBrush(QColor(235, 240, 248)));
+    // The grid is drawn first and the colors on top of it, so the cell lines stay visible.
+    auto *gridItem = m_scene->addPath(cells, cellPen, overlays ? QBrush(Qt::white) : QBrush(QColor(235, 240, 248)));
+    gridItem->setZValue(-2);
+    for (QGraphicsItem *item : m_scene->items())
+    {
+        if (item != gridItem && item->type() == QGraphicsPathItem::Type) item->setZValue(-1);
+    }
+    if (overlays)
+    {
+        QPen linePen = cellPen;
+        linePen.setColor(QColor(90, 90, 90, 140));
+        auto *lines = m_scene->addPath(cells, linePen, Qt::NoBrush);
+        lines->setZValue(-0.5);
+    }
+    if (!purls.isEmpty())
+    {
+        auto *dots = m_scene->addPath(purls, Qt::NoPen, QBrush(QColor(30, 30, 30)));
+        dots->setZValue(-0.4);
+    }
 
     QPolygonF shape;
     for (const QPointF &p : outline)
@@ -444,12 +800,9 @@ void MainWindow::exportInstructions()
     }
     // All pieces, so the file is a complete knitting pattern.
     QString text;
-    const StitchSize size = currentSize();
     for (const LoadedPiece &piece : m_pattern.pieces)
     {
-        const QPolygonF &source = (m_allowance->isChecked() && !piece.cutLine.isEmpty()) ? piece.cutLine
-                                                                                         : piece.seamLine;
-        const StitchGrid grid = StitchGrid::build(knittingOutline(source, piece.grainline), size);
+        const StitchGrid grid = gridFor(piece);
         text += QStringLiteral("== %1 ==\n").arg(piece.name);
         text += writeInstructions(grid, currentShaping()).join(QLatin1Char('\n')) + QStringLiteral("\n\n");
     }
