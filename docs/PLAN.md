@@ -1,6 +1,6 @@
 # Stitchly2D – plan
 
-Status 2026-11-13: skeleton done; `stitchcore` (stitch size, catalog of basic types and special/color patterns, bands with overlays, stitch grid, shaping, instructions, CSV) done with tests in `src/test/stitchcore`. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`. `vtools` is included because `ifc` and `vwidgets` depend on it; `tools` is left out. `stitchcore` and the app come next.
+Status 2026-11-13: skeleton done. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`; the top-level `Stitchly2D.pro` builds everything. `stitchcore` (stitch size, catalog of basic types and special/color patterns, bands with overlays, stitch grid, shaping, instructions, CSV, `.stpat` files, piece orientation) is done with tests in `src/test/stitchcore`. The pattern loader (step 2) is done: `src/app/stitchly2d` loads `.sm2d` + `.smis` with Seamly2D's own parser and prints stitch counts and instructions per piece from the command line (`src/test/smoke_test.sh` checks it). Next: the main window (step 4), then the AI integration (step 6).
 
 ## Context
 Stitchly2D should take pattern files from Seamly2D (`.sm2d` + `.smis`) and prepare them for knitting. Crochet and embroidery follow later. The user wants the sources and framework close to Seamly2D so the look and feel match. The repo is empty (no commits). Seamly2D is at `/var/projects/Seamly2D`: GPLv3, qmake, Qt 6 widgets, static libs under `src/libs/*`, apps under `src/app/{seamly2d,seamlyme}`. Its branch `feature/knitting-grid` (commit 5fdd2e99c, by the same user) already adds a per-piece grid to Seamly2D. That is a good reference for grid anchoring and clipping to the seam line.
@@ -16,8 +16,8 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 - `src/app/stitchly2d/` (new app): `main.cpp`, `ApplicationStitchly` (derived from `VAbstractApplication`), `mainwindow.{h,cpp,ui}`, `version.h`, `stitchly2d.pro/.pri`, `share/resources`, and translations. Model it on `src/app/seamlyme` (the smaller sibling app).
 - Look and feel: reuse the vmisc theme and icon resources (`icon/icons/theme.qrc`), `VCommonSettings`/`VSettings` for preferences and themes, the `VMainGraphicsScene`/`VMainGraphicsView` canvas and the same dock/toolbar layout (pieces list, properties dock, canvas). Add a Stitchly-specific icon set and name.
 
-### 2. Pattern import (reuse, not rewrite)
-- Open `.sm2d` through `ifc` `VDomDocument`/`VAbstractPattern` and `vpatterndb` `VContainer`. `VPattern` lives in the app (`src/app/seamly2d/xml/vpattern.*`), so copy a headless, trimmed version into `stitchcore` (parse draft objects and `<pieces>`, no tools or undo).
+### 2. Pattern import (reuse, not rewrite) - done
+- Implemented as `src/app/stitchly2d/core/pattern_loader.*`. Seamly2D has no headless mode: its parser builds the geometry through the tool classes, which need a QApplication, scenes, a view and a main window. So the loader runs Seamly2D's own `VPattern` (copied unchanged to `src/app/stitchly2d/xml/`, except that background images are skipped) on the offscreen Qt platform with a stub window (`HeadlessWindow`) and a shim `Application2D` (keeps the upstream class name so the copy stays close to upstream; `isAppInGUIMode()` is false so no dialogs open). The pattern file is never modified (Seamly2D's own load path rewrites it; that part is not copied).
 - Load measurements from the `.smis` referenced by the pattern. Seamly2D already handles the converters for old file versions.
 - Build `VPiece` → `VLayoutPiece` (the same path layout export uses) to get the closed seam line and, optionally, the seam allowance polygon and grainline.
 

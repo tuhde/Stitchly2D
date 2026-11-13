@@ -5,6 +5,7 @@
 #include "stitchtype.h"
 #include "catalog.h"
 #include "patternfile.h"
+#include "pieceoutline.h"
 #include "shaping.h"
 #include "instructions.h"
 
@@ -36,6 +37,9 @@ private slots:
     void fileRoundTrip();
     void fileErrors();
     void importPolicies();
+    void outlineUpright();
+    void outlineRotated();
+    void outlineNoGrainline();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -433,6 +437,48 @@ void TstStitchCore::importPolicies()
     r = addToCatalog(c, {seed}, ConflictPolicy::Rename);
     QVERIFY(c.contains("Seed stitch (3)"));            // no clash with the first rename
     QCOMPARE(c.find("Seed stitch").legend.first(), QString("k"));
+}
+
+static bool near(const QPointF &a, const QPointF &b) { return QLineF(a, b).length() < 1e-6; }
+
+void TstStitchCore::outlineUpright()
+{
+    // 100 wide, 300 high, drawn with y down; grainline points down along the piece
+    const QPolygonF scene({{10, 20}, {110, 20}, {110, 320}, {10, 320}});
+    const QPolygonF out = knittingOutline(scene, QLineF(60, 50, 60, 280));
+    const QRectF box = out.boundingRect();
+    QVERIFY(near(box.topLeft(), QPointF(0, 0)));
+    QVERIFY(qAbs(box.width() - 100) < 1e-6 && qAbs(box.height() - 300) < 1e-6);
+    // the drawn bottom edge (scene y = 320) is the cast-on edge: smallest y after the flip
+    QVERIFY(near(out.at(2), QPointF(100, 0)));
+    QVERIFY(near(out.at(0), QPointF(0, 300)));
+    // the direction of the grainline arrow makes no difference
+    const QPolygonF rev = knittingOutline(scene, QLineF(60, 280, 60, 50));
+    for (int i = 0; i < out.size(); ++i) QVERIFY(near(out.at(i), rev.at(i)));
+}
+
+void TstStitchCore::outlineRotated()
+{
+    // The same piece lying on its side, grainline horizontal: it must come out 100 wide and 300 high.
+    const QPolygonF scene({{0, 0}, {300, 0}, {300, 100}, {0, 100}});
+    const QPolygonF out = knittingOutline(scene, QLineF(20, 50, 280, 50));
+    const QRectF box = out.boundingRect();
+    QVERIFY(qAbs(box.width() - 100) < 1e-6);
+    QVERIFY(qAbs(box.height() - 300) < 1e-6);
+    // and a diagonal grainline (45 degrees) still ends up vertical
+    const QPolygonF diag({{0, 0}, {100, 0}, {100, 100}, {0, 100}});
+    const QPolygonF d = knittingOutline(diag, QLineF(0, 0, 100, 100));
+    QVERIFY(qAbs(d.boundingRect().width() - 141.4213562) < 1e-4);
+}
+
+void TstStitchCore::outlineNoGrainline()
+{
+    const QPolygonF scene({{5, 5}, {45, 5}, {45, 105}, {5, 105}});
+    const QPolygonF out = knittingOutline(scene, QLineF());
+    QVERIFY(qAbs(out.boundingRect().width() - 40) < 1e-6);
+    QVERIFY(qAbs(out.boundingRect().height() - 100) < 1e-6);
+    QVERIFY(near(out.at(0), QPointF(0, 100)));       // drawn top-left becomes top-left of a y-up chart
+    QVERIFY(knittingOutline(QPolygonF(), QLineF()).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

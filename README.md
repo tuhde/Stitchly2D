@@ -7,8 +7,8 @@ written instructions for every piece. Crochet and embroidery are planned as furt
 It is a sibling of Seamly2D, not a replacement: Seamly2D stays the drafting tool, Stitchly2D prepares the result for
 yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 
-> **Status: early development.** The project skeleton and the vendored libraries build. The knitting engine and the
-> application window are the next steps. See [docs/PLAN.md](docs/PLAN.md).
+> **Status: early development.** The knitting engine and the pattern loader work and are used from a command-line
+> program (below); the application window is the next step. See [docs/PLAN.md](docs/PLAN.md).
 
 ## How it will work
 
@@ -43,13 +43,25 @@ qmake6 ../Stitchly2D.pro
 make -j$(nproc)
 ```
 
+## Trying it
+
+```sh
+build/src/app/stitchly2d/bin/stitchly2d --stitch-width 5 --row-height 3.5 pattern.sm2d
+```
+
+This loads the pattern and its measurements the way Seamly2D does, and prints the number of rows, the cast-on and
+bind-off stitches and the written instructions for every piece. `--csv` prints the row table instead,
+`--seam-allowance` includes the seam allowance, `--measurements file.smis` replaces the measurement file named in the
+pattern. Pieces are turned so their grainline is vertical. The program needs no display. `src/test/smoke_test.sh
+<path to stitchly2d>` runs it on the bundled sample patterns.
+
 ## Source layout
 
 | Path | Content |
 |---|---|
 | `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, ...). Kept unmodified where possible so changes can be compared with upstream. |
 | `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping (planned). |
-| `src/app/stitchly2d/` | The application (planned). |
+| `src/app/stitchly2d/` | The program: pattern loader (running Seamly2D's parser without a window) and the command-line front end. The main window is planned. |
 | `docs/PLAN.md` | Design and roadmap. |
 | `NOTICE` | Which Seamly2D commit the libraries come from. |
 

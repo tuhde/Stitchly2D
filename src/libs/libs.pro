@@ -14,4 +14,5 @@ SUBDIRS = \
     vtools \
     vformat \
     fervor \
+    tools \
     stitchcore
