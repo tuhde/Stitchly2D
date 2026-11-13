@@ -10,7 +10,7 @@ yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 > **Status: early development.** The knitting engine, the pattern loader and a first main window work: open a
 > pattern, pick a basic stitch or enter the stitch width and row height, split a piece into bands with their own
 > stitch, lay special stitch and color patterns over them, and see the stitch grid and written instructions per
-> piece. The catalog of stitches and patterns can be edited and exchanged as `.stpat` files; bands, patterns and settings are saved in project files (`.stitchly`), which also carry the catalog entries they use.
+> piece. The catalog of stitches and patterns can be edited and exchanged as `.stpat` files; bands, patterns and settings are saved in project files (`.stitchly`), which also carry the catalog entries they use. Edits can be undone (Edit > Undo), and the window warns before unsaved changes would be lost.
 > See [docs/PLAN.md](docs/PLAN.md).
 
 ## How it will work

@@ -197,15 +197,26 @@ McpToolResult writeTextFile(const QString &path, const QString &content)
     return McpToolResult::ok(QStringLiteral("Wrote %1").arg(path));
 }
 
-McpTool tool(const QString &name, const QString &description, const QJsonObject &schema, bool readOnly,
-             McpToolHandler handler)
+/** While a tool runs, the undo steps it makes are labelled as Claude's. */
+struct UndoLabel
+{
+    explicit UndoLabel(MainWindow *window) : m_window(window) { m_window->setUndoPrefix(QStringLiteral("Claude: ")); }
+    ~UndoLabel() { m_window->setUndoPrefix(QString()); }
+    MainWindow *m_window;
+};
+
+McpTool tool(MainWindow *window, const QString &name, const QString &description, const QJsonObject &schema,
+             bool readOnly, McpToolHandler handler)
 {
     McpTool t;
     t.name = name;
     t.description = description;
     t.inputSchema = schema;
     t.readOnly = readOnly;
-    t.handler = std::move(handler);
+    t.handler = [window, handler](const QJsonObject &arguments) {
+        UndoLabel label(window);
+        return handler(arguments);
+    };
     return t;
 }
 }
@@ -216,7 +227,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
     const QJsonObject pieceOnly = object({{QStringLiteral("piece"), str(QStringLiteral("Piece name; default: the selected piece."))}});
 
     // ---- Look --------------------------------------------------------------------------------------------------------
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("get_project_info"),
         QStringLiteral("State of the open project: pattern file, project file, the pieces, the selected piece, the stitch "
                        "settings and what the catalog contains. Call this first."),
@@ -232,7 +243,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(QStringLiteral("Project info:"), info);
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("list_pieces"),
         QStringLiteral("All pieces with their size in mm and, with the current settings, rows, cast-on, widest row, "
                        "bind-off and bands."),
@@ -243,7 +254,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                                      QJsonObject{{QStringLiteral("pieces"), pieces}});
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("get_instructions"),
         QStringLiteral("The written knitting instructions of a piece (cast on, rows, shaping, bind off), as shown in the "
                        "Instructions panel."),
@@ -257,7 +268,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                                                  {QStringLiteral("summary"), w->pieceSummary(piece)}});
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("get_row_table"),
         QStringLiteral("Row table of a piece as CSV: row, band, stitch type, first stitch, stitch count and the change "
                        "at the left and right edge."),
@@ -268,7 +279,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(w->rowTableFor(piece));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("screenshot"),
         QStringLiteral("Picture of the Stitchly2D window: the selected piece with its stitch grid, the settings and the "
                        "instructions. Look at it to check the result."),
@@ -278,7 +289,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return r;
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("select_piece"),
         QStringLiteral("Show a piece in the window (the user sees it on the canvas)."),
         object({{QStringLiteral("piece"), str(QStringLiteral("Piece name."))}}, {QStringLiteral("piece")}), false,
@@ -293,7 +304,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
         }));
 
     // ---- Stitch settings ---------------------------------------------------------------------------------------------
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("set_stitch_settings"),
         QStringLiteral("Change the stitch settings shared by all pieces. All fields are optional. `stitchType` takes a "
                        "basic stitch of the catalog (its width and height are used) or \"custom\"; "
@@ -359,12 +370,12 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 else if (v == QLatin1String("k2tog")) s.shaping.decrease = DecreaseMethod::K2tog;
                 else return McpToolResult::error(QStringLiteral("decrease must be k2tog_ssk or k2tog."));
             }
-            w->setSettings(s);
+            w->setSettings(s, QObject::tr("Change stitch settings"));
             return McpToolResult::ok(QStringLiteral("Stitch settings changed:"), settingsJson(w->settings()));
         }));
 
     // ---- Catalog -----------------------------------------------------------------------------------------------------
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("get_catalog"),
         QStringLiteral("The catalog: basic stitches (name, stitch width, row height in mm) and special / color patterns. "
                        "A pattern is a chart of text: `rows` lists the rows top first, the last row is the first row "
@@ -373,7 +384,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(QStringLiteral("Catalog:"), catalogJson(w->catalog()));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("set_basic_stitch"),
         QStringLiteral("Add a basic stitch to the catalog or change an existing one. Changes apply to this session and are "
                        "stored in saved projects; the user keeps them in the catalog file by pressing OK in the Catalog "
@@ -398,11 +409,11 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             StitchCatalog c = w->catalog();
             const bool existed = c.basics().contains(t.name);
             c.basics().set(t);
-            w->setCatalog(c);
+            w->setCatalog(c, QObject::tr("%1 basic stitch %2").arg(existed ? QObject::tr("Change") : QObject::tr("Add"), t.name));
             return McpToolResult::ok(QStringLiteral("%1 basic stitch %2").arg(existed ? QStringLiteral("Changed") : QStringLiteral("Added"), t.name));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("delete_basic_stitch"),
         QStringLiteral("Remove a basic stitch from the catalog. Bands that used it fall back to the default stitch."),
         object({{QStringLiteral("name"), str(QStringLiteral("Name of the stitch."))}}, {QStringLiteral("name")}), false,
@@ -413,11 +424,11 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             {
                 return McpToolResult::error(QStringLiteral("No basic stitch named \"%1\".").arg(name));
             }
-            w->setCatalog(c);
+            w->setCatalog(c, QObject::tr("Delete basic stitch %1").arg(name));
             return McpToolResult::ok(QStringLiteral("Removed %1").arg(name));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("set_pattern"),
         QStringLiteral("Add a special-stitch or color pattern to the catalog, or replace one with the same name. The "
                        "pattern is the chart of one repeat: `rows` is a list of rows, top row first (the last row is the "
@@ -463,14 +474,14 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             StitchCatalog c = w->catalog();
             const bool existed = c.contains(p.name);
             c.set(p);
-            w->setCatalog(c);
+            w->setCatalog(c, QObject::tr("%1 pattern %2").arg(existed ? QObject::tr("Change") : QObject::tr("Add"), p.name));
             return McpToolResult::ok(QStringLiteral("%1 pattern %2 (%3 x %4)")
                                          .arg(existed ? QStringLiteral("Changed") : QStringLiteral("Added"), p.name)
                                          .arg(p.width).arg(p.height),
                                      patternJson(p));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("delete_pattern"),
         QStringLiteral("Remove a pattern from the catalog. It is taken off every band that used it."),
         object({{QStringLiteral("name"), str(QStringLiteral("Pattern name."))}}, {QStringLiteral("name")}), false,
@@ -481,12 +492,12 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             {
                 return McpToolResult::error(QStringLiteral("No pattern named \"%1\".").arg(name));
             }
-            w->setCatalog(c);
+            w->setCatalog(c, QObject::tr("Delete pattern %1").arg(name));
             return McpToolResult::ok(QStringLiteral("Removed %1").arg(name));
         }));
 
     // ---- Bands and patterns ------------------------------------------------------------------------------------------
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("get_bands"),
         QStringLiteral("The bands of a piece, from the bottom up, with the patterns laid over them."),
         pieceOnly, true, [w](const QJsonObject &a) {
@@ -515,7 +526,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                                                   {QStringLiteral("description"), QStringLiteral("Patterns laid over this band.")},
                                                   {QStringLiteral("items"), overlaySchema}}}},
         {QStringLiteral("stitchType")});
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("set_bands"),
         QStringLiteral("Replace the bands of a piece. A piece is knitted from the bottom up in bands; each band has a basic "
                        "stitch, a height in mm (the last band reaches the top) and optionally special-stitch or color "
@@ -561,8 +572,35 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(QStringLiteral("Bands of %1 set:").arg(piece), w->pieceSummary(piece));
         }));
 
+    // ---- Undo ---------------------------------------------------------------------------------------------------------
+    registry.registerTool(tool(w,
+        QStringLiteral("undo"),
+        QStringLiteral("Undo the last change to the stitch settings, the catalog or the bands (also the user's own "
+                       "changes). Returns what was undone. Steps made by Claude are listed as \"Claude: ...\"."),
+        noArguments, false, [w](const QJsonObject &) {
+            const QString what = w->undo();
+            if (what.isEmpty())
+            {
+                return McpToolResult::error(QStringLiteral("There is nothing to undo."));
+            }
+            return McpToolResult::ok(QStringLiteral("Undone: %1").arg(what),
+                                     QJsonObject{{QStringLiteral("undone"), what},
+                                                 {QStringLiteral("nextUndo"), stringArray(w->undoTexts().mid(0, 5))}});
+        }));
+    registry.registerTool(tool(w,
+        QStringLiteral("redo"),
+        QStringLiteral("Redo what was undone last. Returns what was redone."),
+        noArguments, false, [w](const QJsonObject &) {
+            const QString what = w->redo();
+            if (what.isEmpty())
+            {
+                return McpToolResult::error(QStringLiteral("There is nothing to redo."));
+            }
+            return McpToolResult::ok(QStringLiteral("Redone: %1").arg(what));
+        }));
+
     // ---- Files (the user is asked) -----------------------------------------------------------------------------------
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("open_pattern"),
         QStringLiteral("Open a Seamly2D pattern (.sm2d) with its measurements. This starts a new project: bands and "
                        "patterns of the previous one are dropped. The user is asked to allow reading the file."),
@@ -577,7 +615,8 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 return McpToolResult::error(QStringLiteral("File not found: %1").arg(path));
             }
             if (!confirmFileAccess(w, QObject::tr("Claude wants to open a pattern"),
-                                   QObject::tr("Allow Claude to open this pattern?\n\n%1").arg(path), path))
+                                   QObject::tr("Allow Claude to open this pattern?%1\n\n%2")
+                                       .arg(w->isModified() ? QObject::tr("\n\nThe current project has unsaved changes, which will be lost.") : QString(), path), path))
             {
                 return McpToolResult::error(QStringLiteral("The user did not allow opening %1").arg(path));
             }
@@ -591,7 +630,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                                      w->mcpProjectInfo());
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("open_project"),
         QStringLiteral("Open a Stitchly2D project (.stitchly): its pattern, settings, bands and patterns. If catalog "
                        "entries of the project differ from the user's catalog, the user's entries are kept and the names "
@@ -604,7 +643,8 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 return McpToolResult::error(QStringLiteral("File not found: %1").arg(path));
             }
             if (!confirmFileAccess(w, QObject::tr("Claude wants to open a project"),
-                                   QObject::tr("Allow Claude to open this project?\n\n%1").arg(path), path))
+                                   QObject::tr("Allow Claude to open this project?%1\n\n%2")
+                                       .arg(w->isModified() ? QObject::tr("\n\nThe current project has unsaved changes, which will be lost.") : QString(), path), path))
             {
                 return McpToolResult::error(QStringLiteral("The user did not allow opening %1").arg(path));
             }
@@ -624,7 +664,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(QStringLiteral("Opened project %1").arg(path), info);
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("save_project"),
         QStringLiteral("Save the project (settings, bands, patterns and the catalog entries they use) as a .stitchly file. "
                        "The user is asked to allow writing the file."),
@@ -652,7 +692,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return McpToolResult::ok(QStringLiteral("Saved %1").arg(path));
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("export_instructions"),
         QStringLiteral("Write the written instructions of all pieces to a text file. The user is asked to allow writing "
                        "the file."),
@@ -671,7 +711,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             return writeTextFile(path, w->allInstructionsText());
         }));
 
-    registry.registerTool(tool(
+    registry.registerTool(tool(w,
         QStringLiteral("export_row_table"),
         QStringLiteral("Write the row table of a piece to a CSV file. The user is asked to allow writing the file."),
         object({{QStringLiteral("path"), str(QStringLiteral("Where to write, e.g. /home/me/rows.csv."))},

@@ -22,8 +22,9 @@ a tool set for knitting instead of pattern drafting.
 - **File access needs your OK.** Opening a pattern or project, saving a project and exporting ask you in a dialog the
   first time Claude touches a file in a session (the default answer is No; you can allow that file for the rest of the
   session). Declining makes the tool fail and writes nothing.
-- **No undo yet.** Stitchly2D has no undo, so Claude's changes to the settings, catalog and bands cannot be taken back
-  with a key. Save the project (File > Save project) before you let Claude change things you want to keep.
+- **Undoable.** Claude's changes to the stitch settings, the catalog and the bands are steps in the same history as
+  yours: **Edit > Undo** (Ctrl+Z) takes them back, and the steps are named "Claude: ...". Claude has `undo` and `redo`
+  tools as well. Saving a project or opening a file is not undoable, and opening a pattern clears the history.
 - **The catalog file is not touched.** Stitches and patterns that Claude adds are used in this session and are stored
   in the projects you save, but they are only written to your catalog file when you press OK in the Catalog editor.
 
@@ -78,6 +79,7 @@ Claude learns the tools from the server itself; you do not need to teach it.
 | Catalog | `set_basic_stitch`, `delete_basic_stitch`, `set_pattern` (a chart of text, top row first), `delete_pattern` |
 | Pieces | `set_bands` (bands from the bottom with a basic stitch, a height and patterns laid over them) |
 | Files | `open_pattern`, `open_project`, `save_project`, `export_instructions`, `export_row_table` (each asks you first) |
+| History | `undo`, `redo` |
 | Windows | `list_patterns` |
 
 Things worth knowing:
@@ -87,4 +89,6 @@ Things worth knowing:
 - A pattern is a chart of text: stitch symbols (`k`, `p`, `C4F`) for a special stitch, yarn names (`A`, `MC`,
   `#c03030`) for a color pattern. The top row is the last row of the repeat; an empty text leaves the base stitch alone.
 - `open_project` keeps your catalog entries when they differ from the ones stored in the project, and reports which.
-- Opening a pattern starts a new project: the bands of the previous one are dropped.
+- Opening a pattern starts a new project: the bands of the previous one are dropped. The window warns the user about
+  unsaved changes before it is closed or another file is opened from the menu; Claude's `open_pattern` and
+  `open_project` mention unsaved changes in the question to the user, because they cannot be undone afterwards.

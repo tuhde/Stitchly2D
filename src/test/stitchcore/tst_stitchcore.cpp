@@ -48,6 +48,7 @@ private slots:
     void projectErrors();
     void projectUsedCatalog();
     void projectCatalogMerge();
+    void equality();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -711,6 +712,46 @@ void TstStitchCore::projectCatalogMerge()
     QCOMPARE(use.find("Seed stitch").legend.first(), QString("K"));
     QVERIFY(diffCatalog(use, incoming).differing.isEmpty());
     QVERIFY(diffCatalog(use, incoming).added.isEmpty());
+}
+
+void TstStitchCore::equality()
+{
+    const Project p = sampleProject("/x");
+    const QVector<BandSpec> bands = p.bands.value("Cuff");
+    QVector<BandSpec> same = bands;
+    QVERIFY(same == bands);
+    same[1].overlays[0].offsetX += 1;
+    QVERIFY(!(same == bands));
+    same = bands;
+    same[0].heightMm = 61;
+    QVERIFY(!(same == bands));
+    same = bands;
+    same[1].overlays.removeLast();
+    QVERIFY(!(same == bands));
+    same = bands;
+    same[0].stitchType = "Garter";
+    QVERIFY(!(same == bands));
+
+    ProjectSettings a = p.settings, b = p.settings;
+    QVERIFY(a == b);
+    b.size.stitchWidthMm += 0.5; QVERIFY(!(a == b));
+    b = a; b.shaping.edgeStitches++; QVERIFY(!(a == b));
+    b = a; b.shaping.increase = IncreaseMethod::YarnOver; QVERIFY(!(a == b));
+    b = a; b.includeSeamAllowance = !b.includeSeamAllowance; QVERIFY(!(a == b));
+    b = a; b.stitchType.clear(); QVERIFY(!(a == b));
+
+    const StitchCatalog c = StitchCatalog::withDefaults();
+    StitchCatalog d = c;
+    QVERIFY(sameCatalog(c, d));
+    d.basics().set({"Stockinette", StitchSize{4.0, 3.5}});
+    QVERIFY(!sameCatalog(c, d));
+    d = c; d.basics().set({"New", StitchSize{4.0, 3.5}});
+    QVERIFY(!sameCatalog(c, d)); QVERIFY(!sameCatalog(d, c));
+    d = c; d.remove("Seed stitch");
+    QVERIFY(!sameCatalog(c, d)); QVERIFY(!sameCatalog(d, c));
+    PatternDef seed = c.find("Seed stitch"); seed.legend = {"K", "P"};
+    d = c; d.set(seed);
+    QVERIFY(!sameCatalog(c, d));
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

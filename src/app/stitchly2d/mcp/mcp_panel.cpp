@@ -61,8 +61,8 @@ McpPanel::McpPanel(McpIntegration *mcp, QWidget *parent)
     setObjectName(QStringLiteral("mcp_DockWidget"));   // needed to save and restore the window layout
 
     auto *intro = new QLabel(tr("Claude can read and change the knitting project in the open Stitchly2D windows: stitch "
-                                "settings, catalog, bands and patterns. Changes appear at once. Stitchly2D has no undo "
-                                "yet, so save the project first if you want to keep it. The connection stays on this "
+                                "settings, catalog, bands and patterns. Changes appear at once. Changes can be undone with Edit > Undo; "
+                                "Claude's steps are listed as \"Claude: ...\". The connection stays on this "
                                 "computer. The token is saved, so you configure your Claude client only once."), this);
     intro->setWordWrap(true);
 

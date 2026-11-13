@@ -10,6 +10,7 @@
 #include <QTableWidget>
 
 #include <QLineEdit>
+#include <QAction>
 #include <QTabWidget>
 #include <QTemporaryDir>
 
@@ -55,6 +56,14 @@ private slots:
     void toolsFiles();
     void toolsWithoutPattern();
     void toolsOverHttp();
+    void undoSettings();
+    void undoMergesTyping();
+    void undoBandsAndCatalog();
+    void modifiedAndSaved();
+    void openingResetsHistory();
+    void unsavedChangesQuestion();
+    void closingAsksFirst();
+    void undoByClaude();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -762,6 +771,247 @@ void TstMainWindow::toolsOverHttp()
     QVERIFY(instructions["result"].toObject()["content"].toArray().at(0).toObject()["text"].toString().startsWith("Cast on"));
     mcp->stop();
     QVERIFY(!mcp->isRunning());
+}
+
+void TstMainWindow::undoSettings()
+{
+    QVERIFY(!window->isModified());
+    QVERIFY(window->undoTexts().isEmpty());
+    QVERIFY(window->undo().isEmpty());                                     // nothing to undo
+    QVERIFY(window->redo().isEmpty());
+
+    find<QComboBox>("stitchTypeCombo")->setCurrentText("Garter");
+    QVERIFY(window->isModified());
+    QVERIFY(window->isWindowModified());
+    QVERIFY(window->windowTitle().contains("[*]"));
+    QCOMPARE(window->undoTexts().first(), QString("Change basic stitch"));
+    bool menuShowsIt = false;                                               // the Edit menu knows the step
+    for (QAction *a : window->findChildren<QAction *>())
+        menuShowsIt = menuShowsIt || a->text().contains("Change basic stitch");
+    QVERIFY(menuShowsIt);
+
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    QCOMPARE(window->undoTexts().size(), 2);
+    QCOMPARE(window->undo(), QString("Change stitch settings"));
+    QVERIFY(!find<QCheckBox>("allowanceCheck")->isChecked());
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Garter"));
+    QCOMPARE(window->undo(), QString("Change basic stitch"));
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Stockinette"));
+    QCOMPARE(find<QDoubleSpinBox>("rowHeightSpin")->value(), 3.5);
+    QVERIFY(!window->isModified());                                         // back at the clean point
+    QVERIFY(!window->windowTitle().contains("[*]") || !window->isWindowModified());
+    QCOMPARE(window->redo(), QString("Change basic stitch"));
+    QVERIFY(window->isModified());
+    QCOMPARE(find<QDoubleSpinBox>("rowHeightSpin")->value(), 2.5);
+    QCOMPARE(window->redo(), QString("Change stitch settings"));
+    QVERIFY(find<QCheckBox>("allowanceCheck")->isChecked());
+
+    // changing nothing is no step
+    const int steps = window->undoTexts().size();
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    window->setSettings(window->settings());
+    QCOMPARE(window->undoTexts().size(), steps);
+    // a new edit after an undo drops the redo steps
+    window->undo();
+    find<QSpinBox>("edgeStitchesSpin")->setValue(4);
+    QVERIFY(window->redo().isEmpty());
+}
+
+void TstMainWindow::undoMergesTyping()
+{
+    auto *width = find<QDoubleSpinBox>("stitchWidthSpin");
+    width->setValue(4.0);
+    width->setValue(4.5);
+    width->setValue(4.8);
+    QCOMPARE(window->undoTexts().size(), 1);                                // one step for the typing
+    QCOMPARE(window->undoTexts().first(), QString("Change stitch width"));
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Custom"));
+    auto *rows = find<QDoubleSpinBox>("rowHeightSpin");
+    rows->setValue(3.0);
+    rows->setValue(3.2);
+    QCOMPARE(window->undoTexts().size(), 2);                                // another field, another step
+    window->undo();
+    QCOMPARE(rows->value(), 3.5);
+    QCOMPARE(width->value(), 4.8);
+    window->undo();
+    QCOMPARE(width->value(), 5.0);
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Stockinette"));
+    QVERIFY(!window->isModified());
+    auto *edge = find<QSpinBox>("edgeStitchesSpin");
+    edge->setValue(2);
+    edge->setValue(3);
+    QCOMPARE(window->undoTexts().size(), 1);
+    window->undo();
+    QCOMPARE(edge->value(), 1);
+}
+
+void TstMainWindow::undoBandsAndCatalog()
+{
+    select("Cuff");
+    find<QPushButton>("addBandButton")->click();
+    QCOMPARE(window->undoTexts().first(), QString("Add band"));
+    QTableWidget *bands = find<QTableWidget>("bandTable");
+    qobject_cast<QComboBox *>(bands->cellWidget(0, 0))->setCurrentText("2:2 rib");
+    auto *height = qobject_cast<QDoubleSpinBox *>(bands->cellWidget(0, 1));
+    height->setValue(20);
+    height->setValue(25);
+    QCOMPARE(window->undoTexts().size(), 3);                                // add, stitch, height (typing merged)
+    bands->selectRow(1);
+    find<QPushButton>("addOverlayButton")->click();
+    QCOMPARE(window->undoTexts().first(), QString("Add pattern to band"));
+    QVERIFY(window->instructionsText().contains("(2:2 rib)"));
+
+    // deleting the stitch from the catalog changes the band; one undo brings back both
+    StitchCatalog c = window->catalog();
+    c.basics().remove("2:2 rib");
+    window->setCatalog(c, "Delete rib");
+    QCOMPARE(window->undoTexts().first(), QString("Delete rib"));
+    QCOMPARE(qobject_cast<QComboBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 0))->currentText(), QString("Default stitch"));
+    QCOMPARE(window->undo(), QString("Delete rib"));
+    QVERIFY(window->catalog().basics().contains("2:2 rib"));
+    QCOMPARE(qobject_cast<QComboBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 0))->currentText(), QString("2:2 rib"));
+    QVERIFY(window->instructionsText().contains("(2:2 rib)"));
+
+    QCOMPARE(window->undo(), QString("Add pattern to band"));
+    QCOMPARE(find<QTableWidget>("overlayTable")->rowCount(), 0);
+    window->undo();                                                         // height
+    QCOMPARE(qobject_cast<QDoubleSpinBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 1))->value(), 0.0 + 50.0);
+    window->undo();                                                         // stitch
+    window->undo();                                                         // band
+    QCOMPARE(find<QTableWidget>("bandTable")->rowCount(), 1);
+    QVERIFY(!window->isModified());
+    window->redo(); window->redo(); window->redo();
+    QCOMPARE(find<QTableWidget>("bandTable")->rowCount(), 2);
+    QCOMPARE(qobject_cast<QComboBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 0))->currentText(), QString("2:2 rib"));
+    QCOMPARE(qobject_cast<QDoubleSpinBox *>(find<QTableWidget>("bandTable")->cellWidget(0, 1))->value(), 25.0);
+}
+
+void TstMainWindow::modifiedAndSaved()
+{
+    QTemporaryDir dir;
+    const QString file = dir.filePath("m.stitchly");
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    QVERIFY(window->isModified());
+    QString error;
+    QVERIFY2(window->saveProject(file, &error), qPrintable(error));
+    QVERIFY(!window->isModified());                                         // saving is the clean point
+    QVERIFY(!window->isWindowModified());
+    QVERIFY(window->windowTitle().startsWith("m.stitchly"));
+    QVERIFY(!call("get_project_info").structured.toObject()["modified"].toBool());
+    find<QSpinBox>("edgeStitchesSpin")->setValue(3);
+    QVERIFY(window->isModified());
+    QVERIFY(call("get_project_info").structured.toObject()["modified"].toBool());
+    window->undo();
+    QVERIFY(!window->isModified());                                         // undone back to the saved state
+    window->redo();
+    QVERIFY(window->isModified());
+    window->undo();
+    window->undo();                                                         // before the save: modified again
+    QVERIFY(window->isModified());
+}
+
+void TstMainWindow::openingResetsHistory()
+{
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    QVERIFY(window->isModified());
+    QString error;
+    QVERIFY(window->openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"), &error));
+    QVERIFY(!window->isModified());
+    QVERIFY(window->undoTexts().isEmpty());
+    QVERIFY(window->undo().isEmpty());
+    QTemporaryDir dir;
+    const QString file = dir.filePath("o.stitchly");
+    QVERIFY(window->saveProject(file, &error));
+    find<QSpinBox>("edgeStitchesSpin")->setValue(2);
+    QVERIFY(window->openProject(file, &error, MainWindow::CatalogConflict::KeepMine));
+    QVERIFY(!window->isModified());
+    QVERIFY(window->undoTexts().isEmpty());
+    QCOMPARE(find<QSpinBox>("edgeStitchesSpin")->value(), 1);               // what was saved
+}
+
+void TstMainWindow::unsavedChangesQuestion()
+{
+    int asked = 0;
+    MainWindow::SaveChoice answer = MainWindow::SaveChoice::Cancel;
+    window->setSavePrompt([&]() { ++asked; return answer; });
+    QVERIFY(window->maybeSave());                                           // nothing changed: no question
+    QCOMPARE(asked, 0);
+
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    QVERIFY(!window->maybeSave());                                          // cancel: do not go on
+    QCOMPARE(asked, 1);
+    QVERIFY(window->isModified());
+    answer = MainWindow::SaveChoice::Discard;
+    QVERIFY(window->maybeSave());
+    QVERIFY(window->isModified());                                          // discard keeps the state, the caller replaces it
+    QTemporaryDir dir;
+    QString error;
+    QVERIFY(window->saveProject(dir.filePath("q.stitchly"), &error));
+    find<QCheckBox>("allowanceCheck")->setChecked(false);
+    answer = MainWindow::SaveChoice::Save;                                  // a project file is known: saved without a dialog
+    QVERIFY(window->maybeSave());
+    QVERIFY(!window->isModified());
+    Project saved;
+    QVERIFY(loadProject(dir.filePath("q.stitchly"), saved, &error));
+    QVERIFY(!saved.settings.includeSeamAllowance);
+
+    // no pattern open: nothing to lose, no question
+    MainWindow empty;
+    empty.setSavePrompt([&]() { ++asked; return MainWindow::SaveChoice::Cancel; });
+    const int before = asked;
+    empty.findChild<QCheckBox *>("allowanceCheck")->setChecked(true);
+    QVERIFY(empty.maybeSave());
+    QCOMPARE(asked, before);
+}
+
+void TstMainWindow::closingAsksFirst()
+{
+    window->show();
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    window->setSavePrompt([]() { return MainWindow::SaveChoice::Cancel; });
+    QVERIFY(!window->close());                                              // stays open
+    QVERIFY(window->isVisible());
+    window->setSavePrompt([]() { return MainWindow::SaveChoice::Discard; });
+    QVERIFY(window->close());
+    QVERIFY(!window->isVisible());
+
+    window.reset(new MainWindow);                                           // unchanged window closes without a question
+    QString error;
+    QVERIFY(window->openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"), &error));
+    window->show();
+    window->setSavePrompt([]() { QTest::qFail("must not be asked", __FILE__, __LINE__); return MainWindow::SaveChoice::Cancel; });
+    QVERIFY(window->close());
+}
+
+void TstMainWindow::undoByClaude()
+{
+    QVERIFY(call("undo").isError);                                          // nothing yet
+    QVERIFY(call("redo").isError);
+    QVERIFY(!call("set_stitch_settings", {{"stitchType", "Garter"}}).isError);
+    QCOMPARE(window->undoTexts().first(), QString("Claude: Change stitch settings"));
+    QVERIFY(!call("set_basic_stitch", {{"name", "Moss"}, {"stitchWidthMm", 4.5}, {"rowHeightMm", 3.0}}).isError);
+    QCOMPARE(window->undoTexts().first(), QString("Claude: Add basic stitch Moss"));
+    QVERIFY(!call("set_bands", {{"piece", "Cuff"}, {"bands", QJsonArray{QJsonObject{{"stitchType", "Moss"}}}}}).isError);
+    QCOMPARE(window->undoTexts().first(), QString("Claude: Change bands of Cuff"));
+    QCOMPARE(window->undoTexts().size(), 3);
+    // the user's own step is not labelled, and the label does not stay on afterwards
+    find<QSpinBox>("edgeStitchesSpin")->setValue(2);
+    QCOMPARE(window->undoTexts().first(), QString("Change edge stitches"));
+
+    McpToolResult r = call("undo");                                         // undoes the user's step too
+    QVERIFY(!r.isError);
+    QVERIFY(r.text.contains("Change edge stitches"));
+    r = call("undo");
+    QVERIFY2(r.text.contains("Claude: Change bands of Cuff"), qPrintable(r.text));
+    QCOMPARE(window->bands("Cuff").first().stitchType, QString("Default stitch"));
+    r = call("redo");
+    QVERIFY(r.text.contains("Claude: Change bands of Cuff"));
+    QCOMPARE(window->bands("Cuff").first().stitchType, QString("Moss"));
+    call("undo"); call("undo"); call("undo");                               // bands, stitch, settings
+    call("undo");
+    QVERIFY(!window->catalog().basics().contains("Moss"));
+    QVERIFY(!window->isModified());
+    QVERIFY(call("undo").isError);                                          // the start of the history
 }
 
 int main(int argc, char *argv[])

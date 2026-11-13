@@ -38,6 +38,13 @@ struct Project
     StitchCatalog                    catalog;            //!< only the entries the bands use
 };
 
+// Equality, used to tell whether an edit changed anything (undo history, "modified" marker).
+bool operator==(const Overlay &a, const Overlay &b);
+bool operator==(const BandSpec &a, const BandSpec &b);
+bool operator==(const ProjectSettings &a, const ProjectSettings &b);
+/** Same stitches and patterns with the same definitions (the order of the entries does not matter). */
+bool sameCatalog(const StitchCatalog &a, const StitchCatalog &b);
+
 constexpr int kProjectFileVersion = 1;
 extern const char *const kProjectFileExtension;          // "stitchly"
 

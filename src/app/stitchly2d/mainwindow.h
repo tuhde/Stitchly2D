@@ -2,9 +2,12 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <functional>
+
 #include <QHash>
 #include <QJsonObject>
 #include <QMainWindow>
+#include <QStringList>
 
 #include "core/pattern_loader.h"
 #include "../../libs/stitchcore/catalog.h"
@@ -23,6 +26,7 @@ class QListWidget;
 class QMenu;
 class QPlainTextEdit;
 class QSpinBox;
+class QUndoStack;
 class VMainGraphicsScene;
 class VMainGraphicsView;
 
@@ -37,10 +41,29 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 public:
     MainWindow();
+    ~MainWindow() override;
 
     /** Open a Seamly2D pattern. A new pattern starts a new project: bands and patterns are cleared. */
     bool openPattern(const QString &fileName, QString *error = nullptr,
                      const QString &measurementsOverride = QString());
+
+    /** Answer of the "unsaved changes" question. */
+    enum class SaveChoice { Save, Discard, Cancel };
+    using SavePrompt = std::function<SaveChoice()>;
+    /** Replace the question that is asked before unsaved changes would be lost (the tests use this). */
+    void setSavePrompt(const SavePrompt &prompt) { m_savePrompt = prompt; }
+
+    /** True when the settings, bands or catalog changed since the pattern or project was opened or saved. */
+    bool isModified() const;
+    /** Asks what to do with unsaved changes. False means "cancel": do not go on. */
+    bool maybeSave();
+
+    /** Undo and redo of the settings, the catalog and the bands. Return the text of the step, empty if none. */
+    QString undo();
+    QString redo();
+    QStringList undoTexts() const;      //!< the steps that can be undone, latest first
+    /** Put in front of the text of the steps made while it is set (the Claude tools use "Claude: "). */
+    void setUndoPrefix(const QString &prefix) { m_undoPrefix = prefix; }
 
     /** What to do when a project's catalog entries differ from the ones in the catalog. */
     enum class CatalogConflict { Ask, UseProject, KeepMine };
@@ -61,10 +84,11 @@ public:
     QString currentPiece() const;
     bool selectPiece(const QString &name);
     stitchcore::ProjectSettings settings() const;
-    void setSettings(const stitchcore::ProjectSettings &settings);
+    void setSettings(const stitchcore::ProjectSettings &settings, const QString &undoText = QString());
     QVector<stitchcore::BandSpec> bands(const QString &piece) const;
     /** Replace the bands of a piece. Checked against the catalog; the last band always reaches the top. */
-    bool setBands(const QString &piece, const QVector<stitchcore::BandSpec> &bands, QString *error = nullptr);
+    bool setBands(const QString &piece, const QVector<stitchcore::BandSpec> &bands, QString *error = nullptr,
+                  const QString &undoText = QString());
     /** Size, stitch counts and bands of a piece with the current settings (empty object for an unknown piece). */
     QJsonObject pieceSummary(const QString &piece) const;
     QStringList instructionsFor(const QString &piece) const;
@@ -84,9 +108,10 @@ public:
      * Use a new catalog. Bands that use a basic stitch which is gone fall back to the default stitch, and patterns
      * that are gone are taken off the bands.
      */
-    void setCatalog(const stitchcore::StitchCatalog &catalog);
+    void setCatalog(const stitchcore::StitchCatalog &catalog, const QString &undoText = QString());
 
 protected:
+    void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
@@ -113,6 +138,23 @@ private slots:
     void removeOverlay();
 
 private:
+    friend class StateCommand;
+
+    /** Everything an undo step changes. */
+    struct State
+    {
+        stitchcore::ProjectSettings                            settings;
+        QHash<QString, QVector<stitchcore::BandSpec>>          bands;
+        stitchcore::StitchCatalog                              catalog;
+    };
+    State captureState() const;
+    void applyState(const State &state);
+    static bool sameState(const State &a, const State &b);
+    /** Called after an edit has been made: pushes an undo step if something changed. Same mergeId = one step. */
+    void recordChange(const QString &text, int mergeId = -1);
+    void resetHistory();
+    void updateTitle();
+
     void createActions();
     void createDocks();
     void refresh();
@@ -153,6 +195,11 @@ private:
     QPlainTextEdit     *m_instructions = nullptr;
     bool                m_updating = false;
     QMenu              *m_viewMenu = nullptr;
+    QUndoStack         *m_undo = nullptr;
+    State               m_lastState;       //!< the state the undo history is at
+    int                 m_suppress = 0;    //!< >0 while changes are made that are recorded as one step later
+    QString             m_undoPrefix;
+    SavePrompt          m_savePrompt;
     McpIntegration     *m_mcp = nullptr;
     QLabel             *m_mcpStatus = nullptr;
     QString             m_projectFile;

@@ -275,6 +275,35 @@ StitchCatalog usedCatalog(const StitchCatalog &full, const QMap<QString, QVector
     return used;
 }
 
+bool operator==(const Overlay &a, const Overlay &b)
+{
+    return a.pattern == b.pattern && a.firstRow == b.firstRow && a.rowCount == b.rowCount
+           && a.firstStitch == b.firstStitch && a.stitchCount == b.stitchCount && a.offsetX == b.offsetX
+           && a.offsetY == b.offsetY;
+}
+
+bool operator==(const BandSpec &a, const BandSpec &b)
+{
+    return a.stitchType == b.stitchType && qFuzzyCompare(a.heightMm + 1.0, b.heightMm + 1.0) && a.overlays == b.overlays;
+}
+
+bool operator==(const ProjectSettings &a, const ProjectSettings &b)
+{
+    return a.stitchType == b.stitchType && sameSize(a.size, b.size)
+           && a.includeSeamAllowance == b.includeSeamAllowance && a.shaping.edgeStitches == b.shaping.edgeStitches
+           && a.shaping.increase == b.shaping.increase && a.shaping.decrease == b.shaping.decrease;
+}
+
+bool sameCatalog(const StitchCatalog &a, const StitchCatalog &b)
+{
+    if (a.basics().types().size() != b.basics().types().size() || a.patterns().size() != b.patterns().size())
+    {
+        return false;
+    }
+    const CatalogDiff d = diffCatalog(a, b);     // names in b that a lacks or defines differently
+    return d.added.isEmpty() && d.differing.isEmpty();
+}
+
 CatalogDiff diffCatalog(const StitchCatalog &target, const StitchCatalog &incoming)
 {
     CatalogDiff d;

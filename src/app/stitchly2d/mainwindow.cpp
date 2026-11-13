@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QBuffer>
+#include <QCloseEvent>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -30,6 +31,8 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QToolBar>
+#include <QUndoCommand>
+#include <QUndoStack>
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
@@ -60,10 +63,53 @@ QString catalogPath()
 }
 }
 
+/** One undo step: the state before and after an edit. Edits of the same field in a row merge into one step. */
+class StateCommand : public QUndoCommand
+{
+public:
+    StateCommand(MainWindow *window, const MainWindow::State &before, const MainWindow::State &after,
+                 const QString &text, int mergeId)
+        : QUndoCommand(text), m_window(window), m_before(before), m_after(after), m_id(mergeId)
+    {
+    }
+
+    void undo() override { m_window->applyState(m_before); }
+    void redo() override
+    {
+        if (m_first)           // pushed after the edit has been made
+        {
+            m_first = false;
+            return;
+        }
+        m_window->applyState(m_after);
+    }
+    int id() const override { return m_id; }
+    bool mergeWith(const QUndoCommand *other) override
+    {
+        const auto *c = static_cast<const StateCommand *>(other);
+        if (c->m_window != m_window)
+        {
+            return false;
+        }
+        m_after = c->m_after;
+        return true;
+    }
+
+private:
+    MainWindow       *m_window;
+    MainWindow::State m_before;
+    MainWindow::State m_after;
+    int               m_id;
+    bool              m_first = true;
+};
+
 MainWindow::MainWindow()
 {
     setWindowTitle(QStringLiteral("Stitchly2D"));
     resize(1280, 800);
+
+    m_undo = new QUndoStack(this);
+    connect(m_undo, &QUndoStack::cleanChanged, this, [this](bool) { updateTitle(); });
 
     m_catalog = StitchCatalog::withDefaults();
     StitchCatalog user;
@@ -81,7 +127,16 @@ MainWindow::MainWindow()
     createActions();
     statusBar()->showMessage(tr("Open a Seamly2D pattern (.sm2d) to start."));
     refresh();
+    resetHistory();
     initializeMcp();
+}
+
+MainWindow::~MainWindow()
+{
+    // The undo stack is a child object and is deleted after the members of this window. Clearing it emits
+    // cleanChanged, whose slot would then use members that are already gone.
+    m_undo->blockSignals(true);
+    m_undo->disconnect(this);
 }
 
 void MainWindow::initializeMcp()
@@ -165,6 +220,14 @@ void MainWindow::createActions()
     file->addSeparator();
     file->addAction(tr("&Quit"), this, &QWidget::close, QKeySequence::Quit);
 
+    QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
+    QAction *undoAction = m_undo->createUndoAction(this, tr("&Undo"));
+    undoAction->setShortcut(QKeySequence::Undo);
+    QAction *redoAction = m_undo->createRedoAction(this, tr("&Redo"));
+    redoAction->setShortcut(QKeySequence::Redo);
+    editMenu->addAction(undoAction);
+    editMenu->addAction(redoAction);
+
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     m_viewMenu = viewMenu;
     QAction *fit = viewMenu->addAction(tr("Zoom to &fit"), this, &MainWindow::fitAll,
@@ -187,6 +250,8 @@ void MainWindow::createActions()
     bar->setObjectName(QStringLiteral("toolbar"));
     bar->addAction(open);
     bar->addAction(save);
+    bar->addAction(undoAction);
+    bar->addAction(redoAction);
     bar->addSeparator();
     bar->addAction(fit);
     bar->addAction(zin);
@@ -329,7 +394,13 @@ void MainWindow::createDocks()
     connect(m_stitchWidth, &QDoubleSpinBox::valueChanged, this, &MainWindow::sizeEdited);
     connect(m_rowHeight, &QDoubleSpinBox::valueChanged, this, &MainWindow::sizeEdited);
     connect(m_allowance, &QCheckBox::toggled, this, &MainWindow::settingsChanged);
-    connect(m_edgeStitches, &QSpinBox::valueChanged, this, &MainWindow::settingsChanged);
+    connect(m_edgeStitches, &QSpinBox::valueChanged, this, [this]() {
+        if (!m_updating)
+        {
+            refresh();
+            recordChange(tr("Change edge stitches"), 3);
+        }
+    });
     connect(m_increase, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
     connect(m_decrease, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
 
@@ -375,7 +446,6 @@ bool MainWindow::openPattern(const QString &fileName, QString *error, const QStr
         m_pieces->addItem(p.name);
     }
     m_updating = false;
-    setWindowTitle(QStringLiteral("%1 - Stitchly2D").arg(QFileInfo(fileName).fileName()));
     statusBar()->showMessage(tr("%1 pieces loaded from %2").arg(m_pattern.pieces.size()).arg(fileName));
     if (m_pieces->count() > 0)
     {
@@ -383,11 +453,16 @@ bool MainWindow::openPattern(const QString &fileName, QString *error, const QStr
     }
     populateBandTables();
     refresh();
+    resetHistory();
     return true;
 }
 
 void MainWindow::openFile()
 {
+    if (!maybeSave())
+    {
+        return;
+    }
     const QString file = QFileDialog::getOpenFileName(this, tr("Open pattern"), QString(),
                                                       tr("Seamly2D patterns (*.sm2d *.val);;All files (*)"));
     if (file.isEmpty())
@@ -566,6 +641,12 @@ void MainWindow::commitBands()
     }
     m_bands.insert(name, bands);
     refresh();
+    if (qobject_cast<QDoubleSpinBox *>(sender()))
+        recordChange(tr("Change band height"), 10);
+    else if (qobject_cast<QSpinBox *>(sender()))
+        recordChange(tr("Change pattern placement"), 11);
+    else
+        recordChange(tr("Change band stitch or pattern"));
 }
 
 void MainWindow::addBand()
@@ -587,6 +668,7 @@ void MainWindow::addBand()
     populateBandTables();
     m_bandTable->selectRow(bands.size() - 1);
     refresh();
+    recordChange(tr("Add band"));
 }
 
 void MainWindow::removeBand()
@@ -607,6 +689,7 @@ void MainWindow::removeBand()
     m_bands.insert(m_pattern.pieces.at(index).name, bands);
     populateBandTables();
     refresh();
+    recordChange(tr("Remove band"));
 }
 
 void MainWindow::addOverlay()
@@ -624,6 +707,7 @@ void MainWindow::addOverlay()
     m_bands.insert(m_pattern.pieces.at(index).name, bands);
     populateOverlayTable();
     refresh();
+    recordChange(tr("Add pattern to band"));
 }
 
 void MainWindow::removeOverlay()
@@ -643,10 +727,15 @@ void MainWindow::removeOverlay()
     m_bands.insert(m_pattern.pieces.at(index).name, bands);
     populateOverlayTable();
     refresh();
+    recordChange(tr("Remove pattern from band"));
 }
 
 void MainWindow::stitchTypeChanged()
 {
+    if (m_updating)
+    {
+        return;                  // the window itself switched the stitch (e.g. to "Custom" while a size is typed)
+    }
     const QString name = m_stitchType->currentText();
     if (name != kCustom)
     {
@@ -657,6 +746,7 @@ void MainWindow::stitchTypeChanged()
         m_updating = false;
     }
     refresh();
+    recordChange(tr("Change basic stitch"));
 }
 
 void MainWindow::sizeEdited()
@@ -676,6 +766,8 @@ void MainWindow::sizeEdited()
         m_updating = false;
     }
     refresh();
+    recordChange(sender() == m_stitchWidth ? tr("Change stitch width") : tr("Change row height"),
+                 sender() == m_stitchWidth ? 1 : 2);
 }
 
 void MainWindow::settingsChanged()
@@ -683,6 +775,7 @@ void MainWindow::settingsChanged()
     if (!m_updating)
     {
         refresh();
+        recordChange(tr("Change stitch settings"));
     }
 }
 
@@ -848,7 +941,8 @@ bool MainWindow::saveProject(const QString &fileName, QString *error)
         return false;
     }
     m_projectFile = fileName;
-    setWindowTitle(QStringLiteral("%1 - Stitchly2D").arg(QFileInfo(fileName).fileName()));
+    m_undo->setClean();
+    updateTitle();
     statusBar()->showMessage(tr("Project saved to %1").arg(fileName), 5000);
     return true;
 }
@@ -886,7 +980,8 @@ bool MainWindow::openProject(const QString &fileName, QString *error, CatalogCon
     StitchCatalog merged = m_catalog;
     mergeCatalog(merged, p.catalog, replace);
 
-    // The catalog first (it refreshes the stitch list), then the settings, then the bands
+    // The catalog first (it refreshes the stitch list), then the settings, then the bands. Opening is not an edit.
+    ++m_suppress;
     setCatalog(merged);
     setSettings(p.settings);
 
@@ -896,14 +991,19 @@ bool MainWindow::openProject(const QString &fileName, QString *error, CatalogCon
         m_bands.insert(it.key(), it.value());
     }
     m_projectFile = fileName;
-    setWindowTitle(QStringLiteral("%1 - Stitchly2D").arg(QFileInfo(fileName).fileName()));
     populateBandTables();
     refresh();
+    --m_suppress;
+    resetHistory();
     return true;
 }
 
 void MainWindow::openProjectDialog()
 {
+    if (!maybeSave())
+    {
+        return;
+    }
     const QString file = QFileDialog::getOpenFileName(this, tr("Open project"), QString(),
                                                       tr("Stitchly2D projects (*.stitchly);;All files (*)"));
     if (file.isEmpty())
@@ -966,7 +1066,7 @@ void MainWindow::editCatalog()
     {
         return;
     }
-    setCatalog(dialog.catalog());
+    setCatalog(dialog.catalog(), tr("Edit catalog"));
     QDir().mkpath(QFileInfo(catalogPath()).absolutePath());
     if (m_catalog.save(catalogPath()))
     {
@@ -978,8 +1078,9 @@ void MainWindow::editCatalog()
     }
 }
 
-void MainWindow::setCatalog(const StitchCatalog &catalog)
+void MainWindow::setCatalog(const StitchCatalog &catalog, const QString &undoText)
 {
+    ++m_suppress;
     m_catalog = catalog;
 
     // Basic stitch list of the settings dock
@@ -1018,6 +1119,165 @@ void MainWindow::setCatalog(const StitchCatalog &catalog)
     }
     populateBandTables();
     refresh();
+    --m_suppress;
+    recordChange(undoText.isEmpty() ? tr("Change catalog") : undoText);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// History, unsaved changes
+
+MainWindow::State MainWindow::captureState() const
+{
+    State s;
+    s.settings = settings();
+    s.bands = m_bands;
+    s.catalog = m_catalog;
+    return s;
+}
+
+bool MainWindow::sameState(const State &a, const State &b)
+{
+    return a.settings == b.settings && a.bands == b.bands && sameCatalog(a.catalog, b.catalog);
+}
+
+void MainWindow::applyState(const State &state)
+{
+    ++m_suppress;
+    setCatalog(state.catalog);
+    setSettings(state.settings);
+    m_bands = state.bands;
+    populateBandTables();
+    refresh();
+    --m_suppress;
+    m_lastState = state;
+}
+
+void MainWindow::recordChange(const QString &text, int mergeId)
+{
+    if (!m_undo || m_suppress > 0)
+    {
+        return;
+    }
+    const State now = captureState();
+    if (sameState(now, m_lastState))
+    {
+        return;
+    }
+    m_undo->push(new StateCommand(this, m_lastState, now, m_undoPrefix + text, mergeId));
+    m_lastState = now;
+}
+
+void MainWindow::resetHistory()
+{
+    m_undo->clear();
+    m_lastState = captureState();
+    m_undo->setClean();
+    updateTitle();
+}
+
+void MainWindow::updateTitle()
+{
+    const QString name = !m_projectFile.isEmpty() ? QFileInfo(m_projectFile).fileName()
+                         : !m_pattern.fileName.isEmpty() ? QFileInfo(m_pattern.fileName).fileName() : QString();
+    // "[*]" is replaced by Qt with a marker while the window is modified.
+    setWindowTitle(name.isEmpty() ? QStringLiteral("Stitchly2D") : QStringLiteral("%1[*] - Stitchly2D").arg(name));
+    setWindowModified(m_undo && !m_undo->isClean());
+}
+
+bool MainWindow::isModified() const
+{
+    return m_undo && !m_undo->isClean();
+}
+
+QString MainWindow::undo()
+{
+    if (!m_undo->canUndo())
+    {
+        return QString();
+    }
+    const QString text = m_undo->undoText();
+    m_undo->undo();
+    return text;
+}
+
+QString MainWindow::redo()
+{
+    if (!m_undo->canRedo())
+    {
+        return QString();
+    }
+    const QString text = m_undo->redoText();
+    m_undo->redo();
+    return text;
+}
+
+QStringList MainWindow::undoTexts() const
+{
+    QStringList texts;
+    for (int i = m_undo->index() - 1; i >= 0; --i)
+    {
+        texts << m_undo->text(i);
+    }
+    return texts;
+}
+
+bool MainWindow::maybeSave()
+{
+    if (m_pattern.fileName.isEmpty() || !isModified())
+    {
+        return true;                 // nothing open, or nothing to lose
+    }
+    SaveChoice choice = SaveChoice::Cancel;
+    if (m_savePrompt)
+    {
+        choice = m_savePrompt();
+    }
+    else
+    {
+        QMessageBox box(QMessageBox::Warning, tr("Unsaved changes"),
+                        tr("The project has changes that are not saved. Save them first?"),
+                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
+        box.setDefaultButton(QMessageBox::Save);
+        switch (box.exec())
+        {
+            case QMessageBox::Save:    choice = SaveChoice::Save; break;
+            case QMessageBox::Discard: choice = SaveChoice::Discard; break;
+            default:                   choice = SaveChoice::Cancel; break;
+        }
+    }
+    if (choice == SaveChoice::Discard)
+    {
+        return true;
+    }
+    if (choice == SaveChoice::Cancel)
+    {
+        return false;
+    }
+    if (m_projectFile.isEmpty())
+    {
+        saveProjectAs();             // may be cancelled in the file dialog
+    }
+    else
+    {
+        QString error;
+        if (!saveProject(m_projectFile, &error))
+        {
+            QMessageBox::warning(this, tr("Could not save the project"), error);
+        }
+    }
+    return !isModified();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (maybeSave())
+    {
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
 }
 
 void MainWindow::fitAll()
@@ -1138,8 +1398,9 @@ ProjectSettings MainWindow::settings() const
     return s;
 }
 
-void MainWindow::setSettings(const ProjectSettings &s)
+void MainWindow::setSettings(const ProjectSettings &s, const QString &undoText)
 {
+    ++m_suppress;
     m_updating = true;
     m_allowance->setChecked(s.includeSeamAllowance);
     m_edgeStitches->setValue(s.shaping.edgeStitches);
@@ -1156,6 +1417,8 @@ void MainWindow::setSettings(const ProjectSettings &s)
     m_rowHeight->setValue(s.size.rowHeightMm);
     m_updating = false;
     refresh();
+    --m_suppress;
+    recordChange(undoText.isEmpty() ? tr("Change stitch settings") : undoText);
 }
 
 QVector<BandSpec> MainWindow::bands(const QString &piece) const
@@ -1164,7 +1427,7 @@ QVector<BandSpec> MainWindow::bands(const QString &piece) const
     return p ? bandsFor(*p) : QVector<BandSpec>();
 }
 
-bool MainWindow::setBands(const QString &piece, const QVector<BandSpec> &bands, QString *error)
+bool MainWindow::setBands(const QString &piece, const QVector<BandSpec> &bands, QString *error, const QString &undoText)
 {
     auto fail = [error](const QString &msg) {
         if (error) *error = msg;
@@ -1209,6 +1472,7 @@ bool MainWindow::setBands(const QString &piece, const QVector<BandSpec> &bands, 
         populateBandTables();
     }
     refresh();
+    recordChange(undoText.isEmpty() ? tr("Change bands of %1").arg(piece) : undoText);
     return true;
 }
 
@@ -1269,7 +1533,7 @@ QJsonObject MainWindow::mcpProjectInfo() const
 {
     return QJsonObject{{QStringLiteral("file"), m_pattern.fileName},
                        {QStringLiteral("project"), m_projectFile},
-                       {QStringLiteral("modified"), false},     // there is no unsaved-changes tracking yet
+                       {QStringLiteral("modified"), isModified()},
                        {QStringLiteral("selectedPiece"), currentPiece()},
                        {QStringLiteral("pieceCount"), m_pattern.pieces.size()}};
 }
