@@ -1,0 +1,12 @@
+# build output
+build*/
+*.o
+*.a
+Makefile*
+.qmake.stash
+*.pro.user*
+moc/
+obj/
+rcc/
+uic/
+bin/

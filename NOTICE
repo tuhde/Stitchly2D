@@ -1,0 +1,8 @@
+Stitchly2D vendors the shared libraries of Seamly2D (GPLv3)
+https://github.com/FashionFreedom/Seamly2D (fork used: tuhde/Seamly2D)
+Copied from commit 476a5364d8d4f555071161980725814d3339ab45 (2026-11-05):
+  qmuparser vpropertyexplorer ifc vlayout vgeometry vpatterndb vmisc vwidgets
+  vformat vtools vobj vdxf fervor
+Omitted: tools (depends on the Seamly2D app), vtest. vmcp is still to be copied (AI integration, see docs/PLAN.md).
+Build with Qt 6 (qmake6); Seamly2D no longer builds against Qt 5.
+Keep the copied libs unmodified where possible so upstream diffs stay easy.
