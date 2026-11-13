@@ -38,4 +38,19 @@ echo "$outside" | grep -q "Row 1 is an outside row" || fail "default must shape 
 echo "$every" | grep -q "outside row" && fail "--shape-on every must not mention outside rows"
 [ "$every" != "$outside" ] || fail "--shape-on must change the instructions"
 if "$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --shape-on sideways >/dev/null 2>&1; then fail "bad --shape-on must fail"; fi
+# knitting methods: the project knits the Cuff in the round; --method overrides all pieces, --needles checks the machine
+echo "$proj" | grep -q "Join in the round" || fail "the project's method for the Cuff (round) not used"
+echo "$proj" | grep -q "\[round\]" || fail "the method must be shown for a tube"
+echo "$proj" | grep -q "^Row " && fail "a piece knitted in the round has rounds, not rows"
+flat=$("$BIN" --cli "$DATA/cuff.stitchly" --piece Cuff --method flat 2>/dev/null)
+echo "$flat" | grep -q "Join in the round" && fail "--method flat must override the project"
+echo "$flat" | grep -q "^Cast on" || fail "flat instructions missing"
+machine=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece Cuff --method double_bed_machine --needles 20 2>/dev/null)
+echo "$machine" | grep -q "tubular: 29 needles on the front bed and 29 on the back bed" || fail "double-bed cast-on missing"
+echo "$machine" | grep -q "Warning: the piece needs 29 needles per bed, the machine has 20" || fail "needle warning missing"
+circ=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece Cuff --method circular_machine --needles 58 2>/dev/null)
+echo "$circ" | grep -q "Put 58 needles in work" || fail "circular machine cast-on missing"
+echo "$circ" | grep -q "Warning" && fail "58 needles are enough for 58 stitches"
+if "$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --method sideways >/dev/null 2>&1; then fail "bad --method must fail"; fi
+if "$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --needles x >/dev/null 2>&1; then fail "bad --needles must fail"; fi
 echo "OK"

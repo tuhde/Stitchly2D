@@ -13,6 +13,20 @@ namespace stitchcore
 enum class IncreaseMethod { M1, YarnOver, KFB };
 enum class DecreaseMethod { K2tog_Ssk, K2tog };
 
+/**
+ * How a piece is knitted. Flat: by hand, back and forth (outside and inside rows). The other three knit a tube:
+ * Round = by hand in the round, CircularMachine = on a circular knitting machine (a cylinder of needles),
+ * DoubleBedMachine = tubular on a double-bed machine (half of the stitches on each bed). There are no inside rows
+ * in a tube, and the width of the piece is the circumference.
+ */
+enum class KnitMethod { Flat, Round, CircularMachine, DoubleBedMachine };
+
+inline bool isRound(KnitMethod m) { return m != KnitMethod::Flat; }
+inline bool isMachine(KnitMethod m) { return m == KnitMethod::CircularMachine || m == KnitMethod::DoubleBedMachine; }
+
+QString knitMethodName(KnitMethod method);                         //!< "flat", "round", "circular_machine", "double_bed_machine"
+bool knitMethodFromName(const QString &name, KnitMethod &method);
+
 /** On which rows the edges are shaped. Row 1 is an outside row, then they alternate: inside, outside, ... */
 enum class ShapingRows { OutsideRows, EveryRow };
 
@@ -21,7 +35,11 @@ struct ShapingOptions
     IncreaseMethod increase = IncreaseMethod::M1;
     DecreaseMethod decrease = DecreaseMethod::K2tog_Ssk;
     int edgeStitches = 1;       //!< plain stitches kept at each edge before a shaping stitch
+    KnitMethod  method = KnitMethod::Flat;
+    int         machineNeedles = 0;      //!< needles of the circular machine, or needles per bed of the double-bed machine; 0 = not checked
     ShapingRows shapeOn = ShapingRows::OutsideRows;   //!< flat knitting: shaping is normally done on outside rows
+    /** Tubes have no inside rows, so they are shaped on every round. */
+    ShapingRows effectiveShapeOn() const { return isRound(method) ? ShapingRows::EveryRow : shapeOn; }
     int bulkFrom = 4;           //!< a change of at least this many stitches at one edge is cast on / bound off
                                 //!< instead of increased / decreased in one row; 0 = never
 };

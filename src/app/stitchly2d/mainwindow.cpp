@@ -225,6 +225,8 @@ void MainWindow::createActions()
     undoAction->setShortcut(QKeySequence::Undo);
     QAction *redoAction = m_undo->createRedoAction(this, tr("&Redo"));
     redoAction->setShortcut(QKeySequence::Redo);
+    undoAction->setIconText(tr("Undo"));       // the menu names the step ("Undo Add band"); the toolbar button must stay short
+    redoAction->setIconText(tr("Redo"));
     editMenu->addAction(undoAction);
     editMenu->addAction(redoAction);
 
@@ -304,6 +306,26 @@ void MainWindow::createDocks()
     m_allowance->setObjectName(QStringLiteral("allowanceCheck"));
     form->addRow(m_allowance);
 
+    m_method = new QComboBox;
+    m_method->setObjectName(QStringLiteral("methodCombo"));
+    m_method->addItem(tr("Flat (by hand)"), int(KnitMethod::Flat));
+    m_method->addItem(tr("In the round (by hand)"), int(KnitMethod::Round));
+    m_method->addItem(tr("Circular knitting machine"), int(KnitMethod::CircularMachine));
+    m_method->addItem(tr("Double-bed machine (tubular)"), int(KnitMethod::DoubleBedMachine));
+    m_method->setToolTip(tr("How the pieces are knitted, unless a piece has its own method (Bands and patterns). "
+                            "Round, circular machine and double-bed machine knit a tube: the width of the piece is "
+                            "the circumference, and there are no inside rows."));
+    form->addRow(tr("Knitting method"), m_method);
+
+    m_needles = new QSpinBox;
+    m_needles->setObjectName(QStringLiteral("needlesSpin"));
+    m_needles->setRange(0, 2000);
+    m_needles->setSpecialValueText(tr("not checked"));
+    m_needles->setSuffix(tr(" needles"));
+    m_needles->setToolTip(tr("Needles of the circular machine, or needles per bed of the double-bed machine. "
+                             "The instructions warn if a piece needs more."));
+    form->addRow(tr("Machine needles"), m_needles);
+
     m_edgeStitches = new QSpinBox;
     m_edgeStitches->setObjectName(QStringLiteral("edgeStitchesSpin"));
     m_edgeStitches->setRange(0, 10);
@@ -353,6 +375,25 @@ void MainWindow::createDocks()
     // Bands and overlays of the selected piece
     auto *bandsPanel = new QWidget;
     auto *bandsLayout = new QVBoxLayout(bandsPanel);
+    auto *methodRow = new QHBoxLayout;
+    methodRow->addWidget(new QLabel(tr("This piece is knitted:")));
+    m_pieceMethod = new QComboBox;
+    m_pieceMethod->setObjectName(QStringLiteral("pieceMethodCombo"));
+    m_pieceMethod->addItem(tr("Like the default (see Stitch settings)"), -1);
+    m_pieceMethod->addItem(tr("Flat (by hand)"), int(KnitMethod::Flat));
+    m_pieceMethod->addItem(tr("In the round (by hand)"), int(KnitMethod::Round));
+    m_pieceMethod->addItem(tr("Circular knitting machine"), int(KnitMethod::CircularMachine));
+    m_pieceMethod->addItem(tr("Double-bed machine (tubular)"), int(KnitMethod::DoubleBedMachine));
+    methodRow->addWidget(m_pieceMethod, 1);
+    bandsLayout->addLayout(methodRow);
+    connect(m_pieceMethod, &QComboBox::currentIndexChanged, this, [this]() {
+        const int index = m_pieces->currentRow();
+        if (m_updating || index < 0 || index >= m_pattern.pieces.size())
+        {
+            return;
+        }
+        setPieceMethod(m_pattern.pieces.at(index).name, m_pieceMethod->currentData().toInt());
+    });
     bandsLayout->addWidget(new QLabel(tr("Bands, from the bottom of the piece. The last band reaches the top.")));
     m_bandTable = new QTableWidget(0, 2);
     m_bandTable->setObjectName(QStringLiteral("bandTable"));
@@ -427,6 +468,14 @@ void MainWindow::createDocks()
         }
     });
     connect(m_shapeOn, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
+    connect(m_method, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
+    connect(m_needles, &QSpinBox::valueChanged, this, [this]() {
+        if (!m_updating)
+        {
+            refresh();
+            recordChange(tr("Change machine needles"), 5);
+        }
+    });
     connect(m_increase, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
     connect(m_decrease, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
 
@@ -448,6 +497,8 @@ ShapingOptions MainWindow::currentShaping() const
     o.edgeStitches = m_edgeStitches->value();
     o.bulkFrom = m_bulkFrom->value();
     o.shapeOn = static_cast<ShapingRows>(m_shapeOn->currentData().toInt());
+    o.method = static_cast<KnitMethod>(m_method->currentData().toInt());
+    o.machineNeedles = m_needles->value();
     o.increase = static_cast<IncreaseMethod>(m_increase->currentData().toInt());
     o.decrease = static_cast<DecreaseMethod>(m_decrease->currentData().toInt());
     return o;
@@ -467,6 +518,7 @@ bool MainWindow::openPattern(const QString &fileName, QString *error, const QStr
     m_measurementsOverride = measurementsOverride;
     m_projectFile.clear();
     m_bands.clear();
+    m_methods.clear();
     m_updating = true;
     m_pieces->clear();
     for (const LoadedPiece &p : m_pattern.pieces)
@@ -513,6 +565,69 @@ void MainWindow::pieceChanged()
     }
 }
 
+KnitMethod MainWindow::pieceMethod(const QString &piece) const
+{
+    const auto it = m_methods.constFind(piece);
+    return it != m_methods.constEnd() ? static_cast<KnitMethod>(it.value()) : currentShaping().method;
+}
+
+bool MainWindow::hasPieceMethod(const QString &piece) const
+{
+    return m_methods.contains(piece);
+}
+
+ShapingOptions MainWindow::shapingFor(const LoadedPiece &piece) const
+{
+    ShapingOptions o = currentShaping();
+    o.method = pieceMethod(piece.name);
+    return o;
+}
+
+bool MainWindow::setPieceMethod(const QString &piece, int method, QString *error, const QString &undoText)
+{
+    if (!findPiece(piece))
+    {
+        if (error) *error = tr("No piece named \"%1\".").arg(piece);
+        return false;
+    }
+    if (method < 0)
+    {
+        m_methods.remove(piece);
+    }
+    else if (method > int(KnitMethod::DoubleBedMachine))
+    {
+        if (error) *error = tr("Unknown knitting method.");
+        return false;
+    }
+    else
+    {
+        m_methods.insert(piece, method);
+    }
+    if (piece == currentPiece())
+    {
+        populatePieceMethod();
+    }
+    refresh();
+    recordChange(undoText.isEmpty() ? tr("Change knitting method of %1").arg(piece) : undoText);
+    return true;
+}
+
+void MainWindow::populatePieceMethod()
+{
+    if (!m_pieceMethod)
+    {
+        return;
+    }
+    const bool was = m_updating;
+    m_updating = true;
+    const int index = m_pieces->currentRow();
+    const bool have = index >= 0 && index < m_pattern.pieces.size();
+    m_pieceMethod->setEnabled(have);
+    const QString name = have ? m_pattern.pieces.at(index).name : QString();
+    m_pieceMethod->setCurrentIndex(m_pieceMethod->findData(m_methods.contains(name) ? m_methods.value(name) : -1));
+    m_updating = was;
+}
+
 QVector<BandSpec> MainWindow::bandsFor(const LoadedPiece &piece) const
 {
     const auto it = m_bands.constFind(piece.name);
@@ -542,6 +657,7 @@ StitchGrid MainWindow::gridFor(const LoadedPiece &piece, QPolygonF *outline) con
 
 void MainWindow::populateBandTables()
 {
+    populatePieceMethod();
     const bool was = m_updating;
     m_updating = true;
     const int selected = qMax(0, m_bandTable->currentRow());
@@ -842,7 +958,11 @@ void MainWindow::refresh()
                          .arg(box.width(), 0, 'f', 0).arg(box.height(), 0, 'f', 0)
                          .arg(m_grid.rowCount()).arg(m_grid.castOn()).arg(m_grid.width()).arg(m_grid.bindOff())
                          .arg(piece.grainline.isNull() ? tr("\nNo grainline: drawn orientation") : QString()));
-    m_instructions->setPlainText(writeInstructions(m_grid, currentShaping()).join(QLatin1Char('\n')));
+    m_instructions->setPlainText(writeInstructions(m_grid, shapingFor(piece)).join(QLatin1Char('\n')));
+    if (isRound(pieceMethod(piece.name)))
+    {
+        m_stats->setText(m_stats->text() + tr("\nKnitted as a tube: %1").arg(m_method->itemText(m_method->findData(int(pieceMethod(piece.name))))));
+    }
     showGrid(outline, m_grid);
 }
 
@@ -963,6 +1083,10 @@ bool MainWindow::saveProject(const QString &fileName, QString *error)
     {
         p.bands.insert(it.key(), it.value());
     }
+    for (auto it = m_methods.cbegin(); it != m_methods.cend(); ++it)
+    {
+        p.methods.insert(it.key(), static_cast<KnitMethod>(it.value()));
+    }
     p.catalog = usedCatalog(m_catalog, p.bands);
     if (!stitchcore::saveProject(fileName, p, error))
     {
@@ -1017,6 +1141,11 @@ bool MainWindow::openProject(const QString &fileName, QString *error, CatalogCon
     for (auto it = p.bands.cbegin(); it != p.bands.cend(); ++it)
     {
         m_bands.insert(it.key(), it.value());
+    }
+    m_methods.clear();
+    for (auto it = p.methods.cbegin(); it != p.methods.cend(); ++it)
+    {
+        m_methods.insert(it.key(), int(it.value()));
     }
     m_projectFile = fileName;
     populateBandTables();
@@ -1160,12 +1289,13 @@ MainWindow::State MainWindow::captureState() const
     s.settings = settings();
     s.bands = m_bands;
     s.catalog = m_catalog;
+    s.methods = m_methods;
     return s;
 }
 
 bool MainWindow::sameState(const State &a, const State &b)
 {
-    return a.settings == b.settings && a.bands == b.bands && sameCatalog(a.catalog, b.catalog);
+    return a.settings == b.settings && a.bands == b.bands && a.methods == b.methods && sameCatalog(a.catalog, b.catalog);
 }
 
 void MainWindow::applyState(const State &state)
@@ -1174,6 +1304,7 @@ void MainWindow::applyState(const State &state)
     setCatalog(state.catalog);
     setSettings(state.settings);
     m_bands = state.bands;
+    m_methods = state.methods;
     populateBandTables();
     refresh();
     --m_suppress;
@@ -1373,7 +1504,7 @@ QString MainWindow::allInstructionsText() const
     {
         const StitchGrid grid = gridFor(piece);
         text += QStringLiteral("== %1 ==\n").arg(piece.name);
-        text += writeInstructions(grid, currentShaping()).join(QLatin1Char('\n')) + QStringLiteral("\n\n");
+        text += writeInstructions(grid, shapingFor(piece)).join(QLatin1Char('\n')) + QStringLiteral("\n\n");
     }
     return text;
 }
@@ -1434,6 +1565,8 @@ void MainWindow::setSettings(const ProjectSettings &s, const QString &undoText)
     m_edgeStitches->setValue(s.shaping.edgeStitches);
     m_bulkFrom->setValue(s.shaping.bulkFrom);
     m_shapeOn->setCurrentIndex(m_shapeOn->findData(int(s.shaping.shapeOn)));
+    m_method->setCurrentIndex(m_method->findData(int(s.shaping.method)));
+    m_needles->setValue(s.shaping.machineNeedles);
     m_increase->setCurrentIndex(m_increase->findData(int(s.shaping.increase)));
     m_decrease->setCurrentIndex(m_decrease->findData(int(s.shaping.decrease)));
     // A catalog stitch is only shown by name when its size is the one wanted; otherwise it is a custom stitch.
@@ -1529,6 +1662,7 @@ QJsonObject MainWindow::pieceSummary(const QString &name) const
     return QJsonObject{{QStringLiteral("name"), piece->name},
                        {QStringLiteral("widthMm"), qRound(box.width() * 10) / 10.0},
                        {QStringLiteral("heightMm"), qRound(box.height() * 10) / 10.0},
+                       {QStringLiteral("method"), knitMethodName(pieceMethod(piece->name))},
                        {QStringLiteral("hasGrainline"), !piece->grainline.isNull()},
                        {QStringLiteral("hasStitches"), !grid.isEmpty()},
                        {QStringLiteral("rows"), grid.rowCount()},
@@ -1541,13 +1675,13 @@ QJsonObject MainWindow::pieceSummary(const QString &name) const
 QStringList MainWindow::instructionsFor(const QString &piece) const
 {
     const LoadedPiece *p = findPiece(piece);
-    return p ? writeInstructions(gridFor(*p), currentShaping()) : QStringList();
+    return p ? writeInstructions(gridFor(*p), shapingFor(*p)) : QStringList();
 }
 
 QString MainWindow::rowTableFor(const QString &piece) const
 {
     const LoadedPiece *p = findPiece(piece);
-    return p ? rowTableCsv(gridFor(*p), currentShaping()) : QString();
+    return p ? rowTableCsv(gridFor(*p), shapingFor(*p)) : QString();
 }
 
 QByteArray MainWindow::screenshotPng()
@@ -1572,7 +1706,7 @@ void MainWindow::exportRowTable()
 {
     if (!m_grid.isEmpty())
     {
-        saveText(tr("Export row table"), tr("CSV files (*.csv)"), QStringLiteral("rows.csv"), rowTableCsv(m_grid, currentShaping()));
+        saveText(tr("Export row table"), tr("CSV files (*.csv)"), QStringLiteral("rows.csv"), rowTableCsv(m_grid, shapingFor(m_pattern.pieces.at(m_pieces->currentRow()))));
     }
 }
 

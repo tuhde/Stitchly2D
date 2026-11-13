@@ -59,6 +59,11 @@ private slots:
     void outsideRowsEdgeCases();
     void outsideRowsTextAndTable();
     void shapeOnInProjects();
+    void methodNames();
+    void methodRound();
+    void methodCircularMachine();
+    void methodDoubleBedMachine();
+    void methodsInProjects();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -1038,6 +1043,191 @@ void TstStitchCore::shapeOnInProjects()
     settings["shapeOn"] = "sideways";
     QVERIFY(!loadProject(write("bad.stitchly"), q, &error));
     QVERIFY(error.contains("shapeOn"));
+}
+
+void TstStitchCore::methodNames()
+{
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine})
+    {
+        KnitMethod back = KnitMethod::Flat;
+        QVERIFY(knitMethodFromName(knitMethodName(m), back));
+        QVERIFY(back == m);
+    }
+    KnitMethod m = KnitMethod::Round;
+    QVERIFY(!knitMethodFromName("sideways", m));
+    QVERIFY(m == KnitMethod::Round);                                  // unchanged on failure
+    QVERIFY(!isRound(KnitMethod::Flat));
+    QVERIFY(isRound(KnitMethod::Round) && !isMachine(KnitMethod::Round));
+    QVERIFY(isMachine(KnitMethod::CircularMachine) && isMachine(KnitMethod::DoubleBedMachine));
+    ShapingOptions o;
+    QVERIFY(o.method == KnitMethod::Flat);
+    QVERIFY(o.effectiveShapeOn() == ShapingRows::OutsideRows);
+    o.method = KnitMethod::Round;
+    QVERIFY(o.effectiveShapeOn() == ShapingRows::EveryRow);           // no inside rows in a tube
+}
+
+void TstStitchCore::methodRound()
+{
+    ShapingOptions o;
+    o.method = KnitMethod::Round;
+    // a single stitch change on row 2 (an inside row in flat knitting) stays on round 2
+    const StitchSize size{5.0, 5.0};
+    const StitchGrid small = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 5}, {95, 5}, {95, 40}, {0, 40}}), size);
+    QStringList lines = writeInstructions(small, o);
+    QString text = lines.join('\n');
+    QVERIFY2(lines.first().startsWith("Cast on 20 stitches. Join in the round without twisting"), qPrintable(text));
+    QVERIFY2(text.contains("Round 2: keep 1 edge stitch(es), decrease 1 (k2tog) at the end of the round"), qPrintable(text));
+    QVERIFY(!text.contains("Row "));
+    QVERIFY(!text.contains("Rows "));
+    QVERIFY(!text.contains("outside row"));
+    QVERIFY(text.contains("Rounds 3-8: work even"));
+    // flat knitting would have moved it to row 3
+    ShapingOptions flat;
+    QVERIFY(writeInstructions(small, flat).join('\n').contains("Row 3: keep"));
+
+    // the left edge is the beginning of the round
+    const StitchGrid leftChange = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 40}, {5, 40}, {5, 5}, {0, 5}}), size);
+    QVERIFY(writeInstructions(StitchGrid::build(QPolygonF({{5, 0}, {100, 0}, {100, 40}, {0, 40}, {0, 5}, {5, 5}}), size), o)
+                .join('\n').contains("at the beginning of the round"));
+    Q_UNUSED(leftChange)
+
+    // a large change cannot be cast on or bound off in a tube: it is spread over the round
+    const StitchGrid ledge = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {200, 100}, {200, 200}, {0, 200}}), size);
+    text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("increase 20 (M1) evenly across the round"), qPrintable(text));
+    QVERIFY(!text.contains("cast on 20"));
+    QVERIFY2(!text.contains("keep"), qPrintable(text));               // nothing at the marker to keep
+    // regular shaping is one line, in rounds
+    const StitchGrid slope = StitchGrid::build(QPolygonF({{0, 0}, {200, 0}, {150, 160}, {0, 160}}), StitchSize{5.0, 4.0});
+    text = writeInstructions(slope, o).join('\n');
+    QVERIFY2(text.contains("every 4th round"), qPrintable(text));
+    QVERIFY(text.contains("work the other rounds even"));
+    QVERIFY(text.contains("starting with round"));
+    QVERIFY(!text.contains(" row"));
+    // the row table follows the same plan (every round)
+    const QStringList csv = rowTableCsv(slope, o).split('\n', Qt::SkipEmptyParts);
+    QCOMPARE(csv.size(), slope.rowCount() + 1);
+    QCOMPARE(csv.at(slope.rowCount()).split(';').at(4).toInt(), slope.bindOff());
+}
+
+void TstStitchCore::methodCircularMachine()
+{
+    ShapingOptions o;
+    o.method = KnitMethod::CircularMachine;
+    const StitchSize size{5.0, 5.0};
+    const StitchGrid ledge = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {200, 100}, {200, 200}, {0, 200}}), size);
+    QStringList lines = writeInstructions(ledge, o);
+    QString text = lines.join('\n');
+    QVERIFY2(lines.first().startsWith("Put 20 needles in work and cast on"), qPrintable(text));
+    QVERIFY2(text.contains("bring 20 needle(s) into work at the end of the round"), qPrintable(text));
+    QVERIFY(!text.contains("increase"));                               // needle work, not hand shaping
+    QVERIFY(!text.contains("keep"));
+    QVERIFY(!text.contains("Row "));
+    QVERIFY(lines.last().startsWith("Take the work off the machine: bind off 40 stitches"));
+    // decreases move the stitch to the neighbour and take the needle out of work
+    const StitchGrid narrowing = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 30}, {90, 30}, {90, 80}, {0, 80}}), size);
+    text = writeInstructions(narrowing, o).join('\n');
+    QVERIFY2(text.contains("transfer 2 stitch(es) to the neighbouring needle(s) and take the empty needle(s) out of work at the end of the round"),
+             qPrintable(text));
+
+    // does the piece fit the machine? needles in the cylinder
+    o.machineNeedles = 0;
+    QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));      // not checked
+    o.machineNeedles = 39;
+    text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("Warning: the piece needs 40 needles, the machine has 39."), qPrintable(text));
+    QVERIFY(!text.contains("per bed"));
+    o.machineNeedles = 40;
+    QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));
+    // by hand in the round the machine size does not matter
+    o.method = KnitMethod::Round;
+    o.machineNeedles = 10;
+    QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));
+}
+
+void TstStitchCore::methodDoubleBedMachine()
+{
+    ShapingOptions o;
+    o.method = KnitMethod::DoubleBedMachine;
+    const StitchSize size{5.0, 5.0};
+    // 21 stitches at the start: 11 on the front bed, 10 on the back bed
+    const StitchGrid odd = StitchGrid::build(QPolygonF({{0, 0}, {105, 0}, {105, 100}, {0, 100}}), size);
+    QStringList lines = writeInstructions(odd, o);
+    QVERIFY2(lines.first().contains("Cast on 21 stitches tubular: 11 needles on the front bed and 10 on the back bed"),
+             qPrintable(lines.join('\n')));
+    QVERIFY(lines.first().contains("two carriage passes"));
+    QVERIFY(lines.last().startsWith("Take the work off both beds: bind off 21 stitches"));
+    // a change of 5 stitches is split between the beds
+    const StitchGrid ledge = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {125, 100}, {125, 200}, {0, 200}}), size);
+    QString text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("bring 5 needle(s) into work at the end of the round (front bed 3, back bed 2)"), qPrintable(text));
+    const StitchGrid narrowing = StitchGrid::build(QPolygonF({{0, 0}, {125, 0}, {125, 100}, {100, 100}, {100, 200}, {0, 200}}), size);
+    text = writeInstructions(narrowing, o).join('\n');
+    QVERIFY2(text.contains("transfer 5 stitch(es) inward at the end of the round (front bed 3, back bed 2) and take the empty needle(s) out of work"),
+             qPrintable(text));
+    QVERIFY(!text.contains("keep"));
+
+    // the needles of one bed are counted
+    o.machineNeedles = 12;                                     // the widest row has 25 stitches: 13 per bed
+    text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("Warning: the piece needs 13 needles per bed, the machine has 12."), qPrintable(text));
+    o.machineNeedles = 13;
+    QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));
+}
+
+void TstStitchCore::methodsInProjects()
+{
+    QTemporaryDir dir;
+    Project p = sampleProject(dir.path());
+    p.settings.shaping.method = KnitMethod::DoubleBedMachine;
+    p.settings.shaping.machineNeedles = 120;
+    p.methods.insert("Cuff", KnitMethod::Round);
+    p.methods.insert("Sleeve", KnitMethod::CircularMachine);      // a piece with no bands, only a method
+    const QString file = dir.filePath("m.stitchly");
+    QString error;
+    QVERIFY(saveProject(file, p, &error));
+    Project q;
+    QVERIFY2(loadProject(file, q, &error), qPrintable(error));
+    QVERIFY(q.settings.shaping.method == KnitMethod::DoubleBedMachine);
+    QCOMPARE(q.settings.shaping.machineNeedles, 120);
+    QCOMPARE(q.methods.size(), 2);
+    QVERIFY(q.methods.value("Cuff") == KnitMethod::Round);
+    QVERIFY(q.methods.value("Sleeve") == KnitMethod::CircularMachine);
+    QVERIFY(q.bands.contains("Cuff"));                            // bands and method of the same piece
+    QVERIFY(!q.bands.contains("Sleeve"));
+    QVERIFY(q.settings == p.settings);
+    Project other = p; other.settings.shaping.method = KnitMethod::Flat;
+    QVERIFY(!(other.settings == p.settings));
+    other = p; other.settings.shaping.machineNeedles = 100;
+    QVERIFY(!(other.settings == p.settings));
+
+    QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly));
+    QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QJsonObject settings = root["settings"].toObject();
+    QJsonObject pieces = root["pieces"].toObject();
+    auto write = [&](const QString &name) {
+        root["settings"] = settings;
+        root["pieces"] = pieces;
+        QFile w(dir.filePath(name)); w.open(QIODevice::WriteOnly); w.write(QJsonDocument(root).toJson());
+        return dir.filePath(name);
+    };
+    const QJsonObject savedSettings = settings;
+    settings.remove("method"); settings.remove("machineNeedles");         // a file from before: flat
+    QVERIFY(loadProject(write("old.stitchly"), q, &error));
+    QVERIFY(q.settings.shaping.method == KnitMethod::Flat);
+    QCOMPARE(q.settings.shaping.machineNeedles, 0);
+    settings = savedSettings; settings["method"] = "sideways";
+    QVERIFY(!loadProject(write("bad1.stitchly"), q, &error));
+    QVERIFY(error.contains("sideways"));
+    settings = savedSettings; settings["machineNeedles"] = -5;
+    QVERIFY(!loadProject(write("bad2.stitchly"), q, &error));
+    settings = savedSettings;
+    pieces["Sleeve"] = QJsonObject{{"method", "sideways"}};
+    QVERIFY(!loadProject(write("bad3.stitchly"), q, &error));
+    pieces["Sleeve"] = QJsonObject();                                      // neither bands nor method
+    QVERIFY(!loadProject(write("bad4.stitchly"), q, &error));
+    QVERIFY(error.contains("Sleeve"));
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

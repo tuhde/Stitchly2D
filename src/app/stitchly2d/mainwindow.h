@@ -80,6 +80,11 @@ public:
     QString projectFile() const { return m_projectFile; }
 
     // ---- The window's state for the Claude (MCP) tools. They act on exactly what the user sees.
+    /** How a piece is knitted: its own method if it has one, otherwise the default of the settings. */
+    stitchcore::KnitMethod pieceMethod(const QString &piece) const;
+    bool hasPieceMethod(const QString &piece) const;
+    /** Give a piece its own knitting method; -1 (or a value that is a KnitMethod) = use the default again. */
+    bool setPieceMethod(const QString &piece, int method, QString *error = nullptr, const QString &undoText = QString());
     QStringList pieceNames() const;
     QString currentPiece() const;
     bool selectPiece(const QString &name);
@@ -145,6 +150,7 @@ private:
     {
         stitchcore::ProjectSettings                            settings;
         QHash<QString, QVector<stitchcore::BandSpec>>          bands;
+        QHash<QString, int>                                    methods;     //!< pieces with their own knitting method
         stitchcore::StitchCatalog                              catalog;
     };
     State captureState() const;
@@ -161,6 +167,9 @@ private:
     stitchcore::StitchSize currentSize() const;
     stitchcore::ShapingOptions currentShaping() const;
     const LoadedPiece *findPiece(const QString &name) const;
+    /** The shaping options of a piece: the settings, with the knitting method of that piece. */
+    stitchcore::ShapingOptions shapingFor(const LoadedPiece &piece) const;
+    void populatePieceMethod();
     void initializeMcp();
     QVector<stitchcore::BandSpec> bandsFor(const LoadedPiece &piece) const;
     stitchcore::StitchCatalog workingCatalog() const;
@@ -174,6 +183,7 @@ private:
     stitchcore::StitchCatalog  m_catalog;
     stitchcore::StitchGrid     m_grid;
     QHash<QString, QVector<stitchcore::BandSpec>> m_bands;   //!< edited bands per piece name
+    QHash<QString, int> m_methods;                           //!< KnitMethod of the pieces that differ from the default
 
     VMainGraphicsScene *m_scene = nullptr;
     VMainGraphicsView  *m_view = nullptr;
@@ -186,6 +196,9 @@ private:
     QSpinBox           *m_edgeStitches = nullptr;
     QSpinBox           *m_bulkFrom = nullptr;
     QComboBox          *m_shapeOn = nullptr;
+    QComboBox          *m_method = nullptr;
+    QSpinBox           *m_needles = nullptr;
+    QComboBox          *m_pieceMethod = nullptr;
     QComboBox          *m_increase = nullptr;
     QComboBox          *m_decrease = nullptr;
     QLabel             *m_stats = nullptr;

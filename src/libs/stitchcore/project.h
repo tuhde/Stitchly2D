@@ -35,6 +35,7 @@ struct Project
     QString                          measurementsFile;   //!< absolute; empty = the one named in the pattern
     ProjectSettings                  settings;
     QMap<QString, QVector<BandSpec>> bands;              //!< by piece name; pieces without an entry use one default band
+    QMap<QString, KnitMethod>        methods;            //!< pieces that are knitted differently from settings.shaping.method
     StitchCatalog                    catalog;            //!< only the entries the bands use
 };
 

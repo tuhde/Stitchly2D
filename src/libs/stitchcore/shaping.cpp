@@ -3,6 +3,31 @@
 namespace stitchcore
 {
 
+QString knitMethodName(KnitMethod method)
+{
+    switch (method)
+    {
+        case KnitMethod::Flat:             return QStringLiteral("flat");
+        case KnitMethod::Round:            return QStringLiteral("round");
+        case KnitMethod::CircularMachine:  return QStringLiteral("circular_machine");
+        case KnitMethod::DoubleBedMachine: return QStringLiteral("double_bed_machine");
+    }
+    return QStringLiteral("flat");
+}
+
+bool knitMethodFromName(const QString &name, KnitMethod &method)
+{
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine})
+    {
+        if (name == knitMethodName(m))
+        {
+            method = m;
+            return true;
+        }
+    }
+    return false;
+}
+
 QVector<Shaping> planShaping(const StitchGrid &grid, ShapingRows shapeOn)
 {
     QVector<Shaping> out;

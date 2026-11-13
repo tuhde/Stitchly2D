@@ -119,21 +119,35 @@ bool saveProject(const QString &path, const Project &p, QString *error)
                          {"includeSeamAllowance", p.settings.includeSeamAllowance},
                          {"edgeStitches", p.settings.shaping.edgeStitches},
                          {"bulkFrom", p.settings.shaping.bulkFrom},
+                         {"method", knitMethodName(p.settings.shaping.method)},
+                         {"machineNeedles", p.settings.shaping.machineNeedles},
                          {"shapeOn", p.settings.shaping.shapeOn == ShapingRows::EveryRow ? "every" : "outside"},
                          {"increase", increaseName(p.settings.shaping.increase)},
                          {"decrease", decreaseName(p.settings.shaping.decrease)}};
 
     QJsonObject pieces;
-    for (auto it = p.bands.cbegin(); it != p.bands.cend(); ++it)
+    QSet<QString> names;
+    for (auto it = p.bands.cbegin(); it != p.bands.cend(); ++it) names.insert(it.key());
+    for (auto it = p.methods.cbegin(); it != p.methods.cend(); ++it) names.insert(it.key());
+    for (const QString &name : names)
     {
-        QJsonArray bands;
-        for (const BandSpec &b : it.value())
+        QJsonObject piece;
+        if (p.bands.contains(name))
         {
-            QJsonArray overlays;
-            for (const Overlay &o : b.overlays) overlays.append(overlayToJson(o));
-            bands.append(QJsonObject{{"stitchType", b.stitchType}, {"heightMm", b.heightMm}, {"overlays", overlays}});
+            QJsonArray bands;
+            for (const BandSpec &b : p.bands.value(name))
+            {
+                QJsonArray overlays;
+                for (const Overlay &o : b.overlays) overlays.append(overlayToJson(o));
+                bands.append(QJsonObject{{"stitchType", b.stitchType}, {"heightMm", b.heightMm}, {"overlays", overlays}});
+            }
+            piece.insert("bands", bands);
         }
-        pieces.insert(it.key(), QJsonObject{{"bands", bands}});
+        if (p.methods.contains(name))
+        {
+            piece.insert("method", knitMethodName(p.methods.value(name)));
+        }
+        pieces.insert(name, piece);
     }
 
     QJsonObject root{{"format", formatId},
@@ -214,6 +228,16 @@ bool loadProject(const QString &path, Project &project, QString *error)
         return fail(error, QStringLiteral("shapeOn must be \"outside\" or \"every\""));
     }
     out.settings.shaping.shapeOn = shapeOn == QLatin1String("outside") ? ShapingRows::OutsideRows : ShapingRows::EveryRow;
+    const QString method = s.value("method").toString(QStringLiteral("flat"));
+    if (!knitMethodFromName(method, out.settings.shaping.method))
+    {
+        return fail(error, QStringLiteral("unknown knitting method \"%1\"").arg(method));
+    }
+    out.settings.shaping.machineNeedles = s.value("machineNeedles").toInt(0);
+    if (out.settings.shaping.machineNeedles < 0)
+    {
+        return fail(error, QStringLiteral("the number of needles must not be negative"));
+    }
     out.settings.shaping.bulkFrom = s.value("bulkFrom").toInt(4);      // files from before this setting: the default
     if (out.settings.shaping.bulkFrom < 0)
     {
@@ -228,8 +252,18 @@ bool loadProject(const QString &path, Project &project, QString *error)
     const QJsonObject pieces = root.value("pieces").toObject();
     for (auto it = pieces.constBegin(); it != pieces.constEnd(); ++it)
     {
+        const QJsonObject pieceObject = it.value().toObject();
+        if (pieceObject.contains("method"))
+        {
+            KnitMethod pieceMethod;
+            if (!knitMethodFromName(pieceObject.value("method").toString(), pieceMethod))
+            {
+                return fail(error, QStringLiteral("piece \"%1\": unknown knitting method").arg(it.key()));
+            }
+            out.methods.insert(it.key(), pieceMethod);
+        }
         QVector<BandSpec> bands;
-        for (const QJsonValue &bv : it.value().toObject().value("bands").toArray())
+        for (const QJsonValue &bv : pieceObject.value("bands").toArray())
         {
             const QJsonObject bj = bv.toObject();
             BandSpec b;
@@ -253,7 +287,11 @@ bool loadProject(const QString &path, Project &project, QString *error)
         }
         if (bands.isEmpty())
         {
-            return fail(error, QStringLiteral("piece \"%1\" has no bands").arg(it.key()));
+            if (!pieceObject.contains("method"))
+            {
+                return fail(error, QStringLiteral("piece \"%1\" has no bands").arg(it.key()));
+            }
+            continue;                    // only a knitting method for this piece
         }
         out.bands.insert(it.key(), bands);
     }
@@ -306,7 +344,8 @@ bool operator==(const ProjectSettings &a, const ProjectSettings &b)
     return a.stitchType == b.stitchType && sameSize(a.size, b.size)
            && a.includeSeamAllowance == b.includeSeamAllowance && a.shaping.edgeStitches == b.shaping.edgeStitches
            && a.shaping.increase == b.shaping.increase && a.shaping.decrease == b.shaping.decrease
-           && a.shaping.bulkFrom == b.shaping.bulkFrom && a.shaping.shapeOn == b.shaping.shapeOn;
+           && a.shaping.bulkFrom == b.shaping.bulkFrom && a.shaping.shapeOn == b.shaping.shapeOn
+           && a.shaping.method == b.shaping.method && a.shaping.machineNeedles == b.shaping.machineNeedles;
 }
 
 bool sameCatalog(const StitchCatalog &a, const StitchCatalog &b)

@@ -3,6 +3,7 @@
 #include <QRegularExpression>
 
 #include <QCheckBox>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QListWidget>
@@ -67,6 +68,10 @@ private slots:
     void undoByClaude();
     void bulkFromSetting();
     void shapeOnSetting();
+    void methodDefaultAndPiece();
+    void methodMachineNeedles();
+    void methodInProjects();
+    void methodTools();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -124,6 +129,7 @@ void TstMainWindow::colorOverlayShowsInInstructions()
     if (qEnvironmentVariableIsSet("STITCHLY_TEST_SHOT"))
     {
         qobject_cast<QSpinBox *>(overlays->cellWidget(0, 2))->setValue(0);
+        if (QDockWidget *settings = window->findChild<QDockWidget *>("settingsDock")) settings->raise();
         window->grab().save(qEnvironmentVariable("STITCHLY_TEST_SHOT"));
     }
 }
@@ -1099,6 +1105,157 @@ void TstMainWindow::shapeOnSetting()
     MainWindow other;
     QVERIFY(other.openProject(dir.filePath("p.stitchly"), &error, MainWindow::CatalogConflict::KeepMine));
     QCOMPARE(other.findChild<QComboBox *>("shapeOnCombo")->currentData().toInt(), int(ShapingRows::EveryRow));
+}
+
+void TstMainWindow::methodDefaultAndPiece()
+{
+    auto *method = find<QComboBox>("methodCombo");
+    auto *own = find<QComboBox>("pieceMethodCombo");
+    QCOMPARE(method->currentData().toInt(), int(KnitMethod::Flat));
+    select("Cuff");
+    QCOMPARE(own->currentData().toInt(), -1);                                  // like the default
+    QVERIFY(window->instructionsText().startsWith("Cast on 58 stitches."));
+    QVERIFY(!window->hasPieceMethod("Cuff"));
+
+    // the default for all pieces
+    method->setCurrentIndex(method->findData(int(KnitMethod::Round)));
+    QVERIFY2(window->instructionsText().startsWith("Cast on 58 stitches. Join in the round"), qPrintable(window->instructionsText()));
+    QVERIFY(!window->instructionsText().contains("Row "));
+    QVERIFY(window->pieceMethod("Pocket") == KnitMethod::Round);
+    select("FrontPanel");
+    QVERIFY(window->instructionsText().contains("Join in the round"));
+    QVERIFY(!window->instructionsText().contains("outside row"));
+    QVERIFY2(window->instructionsText().contains("Round 2"), "shaping on inside rounds exists in a tube");
+    window->undo();
+    QCOMPARE(method->currentData().toInt(), int(KnitMethod::Flat));
+    QVERIFY(window->instructionsText().contains("Row 1 is an outside row"));
+
+    // one piece on its own
+    select("Cuff");
+    own->setCurrentIndex(own->findData(int(KnitMethod::CircularMachine)));
+    QVERIFY(window->hasPieceMethod("Cuff"));
+    QCOMPARE(window->undoTexts().first(), QString("Change knitting method of Cuff"));
+    QVERIFY2(window->instructionsText().startsWith("Put 58 needles in work and cast on"), qPrintable(window->instructionsText()));
+    QVERIFY(window->instructionsText().contains("Take the work off the machine"));
+    select("Pocket");
+    QCOMPARE(own->currentData().toInt(), -1);                                  // other pieces keep the default
+    QVERIFY(window->instructionsText().startsWith("Cast on"));
+    QVERIFY(!window->instructionsText().contains("Put "));
+    select("Cuff");
+    QCOMPARE(own->currentData().toInt(), int(KnitMethod::CircularMachine));    // and the choice is remembered
+    // the whole export uses each piece's own method
+    const QString all = window->allInstructionsText();
+    QVERIFY(all.contains("Put 58 needles in work"));
+    QVERIFY(all.contains("== Pocket =="));
+    QVERIFY(call("get_instructions", {{"piece", "Cuff"}}).text.startsWith("Put 58 needles"));
+    QVERIFY(call("get_row_table", {{"piece", "Cuff"}}).text.startsWith("row;band"));
+    const QJsonArray pieces = call("list_pieces").structured.toObject()["pieces"].toArray();
+    for (const QJsonValue &v : pieces)
+        if (v.toObject()["name"].toString() == "Cuff") QCOMPARE(v.toObject()["method"].toString(), QString("circular_machine"));
+        else if (v.toObject()["name"].toString() == "Pocket") QCOMPARE(v.toObject()["method"].toString(), QString("flat"));
+    // back to the default; undo and redo
+    own->setCurrentIndex(own->findData(-1));
+    QVERIFY(!window->hasPieceMethod("Cuff"));
+    QVERIFY(window->instructionsText().startsWith("Cast on 58 stitches."));
+    window->undo();
+    QVERIFY(window->hasPieceMethod("Cuff"));
+    QCOMPARE(own->currentData().toInt(), int(KnitMethod::CircularMachine));
+    window->undo();
+    QVERIFY(!window->hasPieceMethod("Cuff"));
+    QVERIFY(!window->isModified());
+}
+
+void TstMainWindow::methodMachineNeedles()
+{
+    auto *needles = find<QSpinBox>("needlesSpin");
+    auto *own = find<QComboBox>("pieceMethodCombo");
+    select("Cuff");
+    own->setCurrentIndex(own->findData(int(KnitMethod::CircularMachine)));
+    QVERIFY(!window->instructionsText().contains("Warning"));                   // needles are not checked
+    needles->setValue(40);
+    QVERIFY2(window->instructionsText().contains("Warning: the piece needs 58 needles, the machine has 40."), qPrintable(window->instructionsText()));
+    needles->setValue(58);
+    QVERIFY(!window->instructionsText().contains("Warning"));
+    // typing in the box is one undo step; the double-bed machine counts per bed
+    needles->setValue(10); needles->setValue(20); needles->setValue(25);
+    QCOMPARE(window->undoTexts().first(), QString("Change machine needles"));
+    own->setCurrentIndex(own->findData(int(KnitMethod::DoubleBedMachine)));
+    QVERIFY2(window->instructionsText().contains("Warning: the piece needs 29 needles per bed, the machine has 25."), qPrintable(window->instructionsText()));
+    needles->setValue(29);
+    QVERIFY(!window->instructionsText().contains("Warning"));
+    QVERIFY(window->instructionsText().contains("tubular: 29 needles on the front bed and 29 on the back bed"));
+    // by hand the machine does not matter
+    own->setCurrentIndex(own->findData(int(KnitMethod::Round)));
+    needles->setValue(5);
+    QVERIFY(!window->instructionsText().contains("Warning"));
+}
+
+void TstMainWindow::methodInProjects()
+{
+    auto *method = find<QComboBox>("methodCombo");
+    method->setCurrentIndex(method->findData(int(KnitMethod::DoubleBedMachine)));
+    find<QSpinBox>("needlesSpin")->setValue(120);
+    select("Cuff");
+    auto *own = find<QComboBox>("pieceMethodCombo");
+    own->setCurrentIndex(own->findData(int(KnitMethod::Round)));
+    select("Pocket");
+    const QString pocket = window->instructionsText();
+    select("Cuff");
+    const QString cuff = window->instructionsText();
+    QVERIFY(cuff.contains("Join in the round"));
+    QVERIFY(pocket.contains("tubular"));
+
+    QTemporaryDir dir;
+    QString error;
+    QVERIFY(window->saveProject(dir.filePath("m.stitchly"), &error));
+    MainWindow other;
+    QVERIFY2(other.openProject(dir.filePath("m.stitchly"), &error, MainWindow::CatalogConflict::KeepMine), qPrintable(error));
+    QCOMPARE(other.findChild<QComboBox *>("methodCombo")->currentData().toInt(), int(KnitMethod::DoubleBedMachine));
+    QCOMPARE(other.findChild<QSpinBox *>("needlesSpin")->value(), 120);
+    QVERIFY(other.hasPieceMethod("Cuff"));
+    QVERIFY(!other.hasPieceMethod("Pocket"));
+    QVERIFY(other.pieceMethod("Cuff") == KnitMethod::Round);
+    QVERIFY(other.pieceMethod("Pocket") == KnitMethod::DoubleBedMachine);
+    QCOMPARE(other.instructionsFor("Cuff").join('\n'), cuff);
+    QCOMPARE(other.instructionsFor("Pocket").join('\n'), pocket);
+    QVERIFY(!other.isModified());
+    // a new pattern starts without the piece methods
+    QVERIFY(other.openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"), &error));
+    QVERIFY(!other.hasPieceMethod("Cuff"));
+}
+
+void TstMainWindow::methodTools()
+{
+    McpToolResult r = call("set_knitting_method", {{"piece", "Cuff"}, {"method", "double_bed_machine"}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(window->currentPiece(), QString("Cuff"));
+    QVERIFY(window->pieceMethod("Cuff") == KnitMethod::DoubleBedMachine);
+    QCOMPARE(window->undoTexts().first(), QString("Claude: Change knitting method of Cuff"));
+    QVERIFY(window->instructionsText().contains("two carriage passes"));
+    QCOMPARE(call("get_project_info").structured.toObject()["pieceMethods"].toObject()["Cuff"].toString(), QString("double_bed_machine"));
+    r = call("set_knitting_method", {{"method", "round"}});                    // the selected piece
+    QVERIFY(!r.isError);
+    QVERIFY(window->pieceMethod("Cuff") == KnitMethod::Round);
+    QVERIFY(!call("set_knitting_method", {{"piece", "Cuff"}, {"method", "default"}}).isError);
+    QVERIFY(!window->hasPieceMethod("Cuff"));
+    QVERIFY(call("set_knitting_method", {{"piece", "Cuff"}, {"method", "sideways"}}).isError);
+    QVERIFY(call("set_knitting_method", {{"piece", "Nope"}, {"method", "flat"}}).isError);
+    QVERIFY(call("set_knitting_method", {{"piece", "Cuff"}}).isError);              // no method given
+
+    // the default method and the needles
+    r = call("set_stitch_settings", {{"method", "circular_machine"}, {"machineNeedles", 40}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(r.structured.toObject()["method"].toString(), QString("circular_machine"));
+    QCOMPARE(r.structured.toObject()["machineNeedles"].toInt(), 40);
+    QCOMPARE(find<QComboBox>("methodCombo")->currentData().toInt(), int(KnitMethod::CircularMachine));
+    QVERIFY(call("get_instructions", {{"piece", "Cuff"}}).text.contains("Warning: the piece needs 58 needles, the machine has 40."));
+    QVERIFY(call("set_stitch_settings", {{"method", "sideways"}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"machineNeedles", -1}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"machineNeedles", 2001}}).isError);
+    QCOMPARE(window->settings().shaping.machineNeedles, 40);
+    // Claude can take it back
+    QVERIFY(call("undo").text.contains("Claude: Change stitch settings"));
+    QVERIFY(window->settings().shaping.method == KnitMethod::Flat);
 }
 
 int main(int argc, char *argv[])

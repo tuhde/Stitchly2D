@@ -58,9 +58,15 @@ int main(int argc, char *argv[])
     QCommandLineOption shapeOnOption(QStringLiteral("shape-on"),
                                      QStringLiteral("With --cli: shape the edges on \"outside\" rows only (default) or on \"every\" row."),
                                      QStringLiteral("rows"));
+    QCommandLineOption methodOption(QStringLiteral("method"),
+                                    QStringLiteral("With --cli: knit all pieces flat, round, circular_machine or double_bed_machine."),
+                                    QStringLiteral("method"));
+    QCommandLineOption needlesOption(QStringLiteral("needles"),
+                                     QStringLiteral("With --cli: needles of the circular machine, or per bed of the double-bed machine."),
+                                     QStringLiteral("n"));
     QCommandLineOption pieceOption(QStringLiteral("piece"), QStringLiteral("With --cli: only this piece."),
                                    QStringLiteral("name"));
-    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption, shapeOnOption});
+    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption, shapeOnOption, methodOption, needlesOption});
     parser.process(app);
 
     if (!parser.isSet(cli))
@@ -107,5 +113,16 @@ int main(int argc, char *argv[])
     options.csv = parser.isSet(csv);
     options.piece = parser.value(pieceOption);
     options.shapeOn = parser.value(shapeOnOption);
+    options.method = parser.value(methodOption);
+    if (parser.isSet(needlesOption))
+    {
+        bool ok = false;
+        options.needles = parser.value(needlesOption).toInt(&ok);
+        if (!ok || options.needles < 0)
+        {
+            err << "--needles must be a number, 0 or more.\n";
+            return 2;
+        }
+    }
     return runCli(options, out, err);
 }

@@ -116,6 +116,8 @@ QJsonObject settingsJson(const ProjectSettings &s)
                        {QStringLiteral("includeSeamAllowance"), s.includeSeamAllowance},
                        {QStringLiteral("edgeStitches"), s.shaping.edgeStitches},
                        {QStringLiteral("bulkFrom"), s.shaping.bulkFrom},
+                       {QStringLiteral("method"), knitMethodName(s.shaping.method)},
+                       {QStringLiteral("machineNeedles"), s.shaping.machineNeedles},
                        {QStringLiteral("shapeOn"), s.shaping.shapeOn == ShapingRows::EveryRow ? QStringLiteral("every") : QStringLiteral("outside")},
                        {QStringLiteral("increase"), increaseText(s.shaping.increase)},
                        {QStringLiteral("decrease"), decreaseText(s.shaping.decrease)}};
@@ -237,6 +239,12 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             QJsonObject info = w->mcpProjectInfo();
             info.insert(QStringLiteral("pieces"), stringArray(w->pieceNames()));
             info.insert(QStringLiteral("settings"), settingsJson(w->settings()));
+            QJsonObject methods;
+            for (const QString &name : w->pieceNames())
+            {
+                if (w->hasPieceMethod(name)) methods.insert(name, knitMethodName(w->pieceMethod(name)));
+            }
+            info.insert(QStringLiteral("pieceMethods"), methods);
             QStringList basics, patterns;
             for (const StitchType &t : w->catalog().basics().types()) basics << t.name;
             for (const PatternDef &p : w->catalog().patterns()) patterns << p.name;
@@ -319,6 +327,9 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 {QStringLiteral("includeSeamAllowance"), flag(QStringLiteral("Knit the outline with seam allowance."))},
                 {QStringLiteral("edgeStitches"), integer(QStringLiteral("Plain stitches kept at each edge before shaping."))},
                 {QStringLiteral("bulkFrom"), integer(QStringLiteral("A change of at least this many stitches at one edge is cast on or bound off instead of increased or decreased in one row; 0 = never."))},
+                {QStringLiteral("method"), oneOf({QStringLiteral("flat"), QStringLiteral("round"), QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine")},
+                                                 QStringLiteral("Default knitting method of all pieces: flat by hand, in the round by hand, on a circular knitting machine, or tubular on a double-bed machine. Single pieces can differ (set_knitting_method)."))},
+                {QStringLiteral("machineNeedles"), integer(QStringLiteral("Needles of the circular machine, or needles per bed of the double-bed machine; 0 = not checked. The instructions warn when a piece needs more."))},
                 {QStringLiteral("shapeOn"), oneOf({QStringLiteral("outside"), QStringLiteral("every")},
                                                   QStringLiteral("Rows on which the edges are shaped: outside rows only (row 1 is an outside row; a change needed on an inside row is worked on the outside row before it) or every row."))},
                 {QStringLiteral("increase"), oneOf({QStringLiteral("m1"), QStringLiteral("yarnover"), QStringLiteral("kfb")},
@@ -360,6 +371,19 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 if (n < 0 || n > 10) return McpToolResult::error(QStringLiteral("edgeStitches must be between 0 and 10."));
                 s.shaping.edgeStitches = n;
             }
+            if (has(a, "method"))
+            {
+                if (!knitMethodFromName(text(a, "method"), s.shaping.method))
+                {
+                    return McpToolResult::error(QStringLiteral("method must be flat, round, circular_machine or double_bed_machine."));
+                }
+            }
+            if (has(a, "machineNeedles"))
+            {
+                const int n = a.value(QStringLiteral("machineNeedles")).toInt(-1);
+                if (n < 0 || n > 2000) return McpToolResult::error(QStringLiteral("machineNeedles must be between 0 and 2000."));
+                s.shaping.machineNeedles = n;
+            }
             if (has(a, "shapeOn"))
             {
                 const QString v = text(a, "shapeOn");
@@ -390,6 +414,45 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             }
             w->setSettings(s, QObject::tr("Change stitch settings"));
             return McpToolResult::ok(QStringLiteral("Stitch settings changed:"), settingsJson(w->settings()));
+        }));
+
+    registry.registerTool(tool(w,
+        QStringLiteral("set_knitting_method"),
+        QStringLiteral("Say how a piece is knitted: \"flat\" (by hand, back and forth, with outside and inside rows), "
+                       "\"round\" (by hand in the round), \"circular_machine\" (circular knitting machine) or "
+                       "\"double_bed_machine\" (tubular on a double-bed machine); \"default\" takes the default of the "
+                       "stitch settings again. The three round methods knit a tube: the width of the piece is the "
+                       "circumference, the instructions count rounds, and shaping is done at the beginning and the end "
+                       "of the round. On the machines the shaping is needle work (the double-bed text splits it between "
+                       "the beds). Use get_instructions to read the result."),
+        object({{QStringLiteral("piece"), str(QStringLiteral("Piece name; default: the selected piece."))},
+                {QStringLiteral("method"), oneOf({QStringLiteral("default"), QStringLiteral("flat"), QStringLiteral("round"),
+                                                  QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine")},
+                                                 QStringLiteral("How the piece is knitted."))}},
+               {QStringLiteral("method")}),
+        false, [w](const QJsonObject &a) {
+            QString piece;
+            McpToolResult failure;
+            if (!pieceArgument(w, a, piece, failure)) return failure;
+            const QString name = text(a, "method");
+            int method = -1;
+            if (name != QLatin1String("default"))
+            {
+                KnitMethod m;
+                if (!knitMethodFromName(name, m))
+                {
+                    return McpToolResult::error(QStringLiteral("method must be default, flat, round, circular_machine or double_bed_machine."));
+                }
+                method = int(m);
+            }
+            QString error;
+            if (!w->setPieceMethod(piece, method, &error))
+            {
+                return McpToolResult::error(error);
+            }
+            w->selectPiece(piece);
+            return McpToolResult::ok(QStringLiteral("%1 is knitted: %2").arg(piece, knitMethodName(w->pieceMethod(piece))),
+                                     w->pieceSummary(piece));
         }));
 
     // ---- Catalog -----------------------------------------------------------------------------------------------------

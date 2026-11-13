@@ -34,6 +34,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     QString measurements = options.measurements;
     const bool isProject = options.input.endsWith(QStringLiteral(".stitchly"), Qt::CaseInsensitive);
     QStringList replaced;
+    QMap<QString, KnitMethod> methods;
 
     if (isProject)
     {
@@ -49,6 +50,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
         mergeCatalog(catalog, project.catalog, true);
         settings = project.settings;
         bands = project.bands;
+        methods = project.methods;
         patternFile = project.patternFile;
         if (measurements.isEmpty())
         {
@@ -59,6 +61,14 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     if (options.hasStitchWidth) settings.size.stitchWidthMm = options.stitchWidthMm;
     if (options.hasRowHeight) settings.size.rowHeightMm = options.rowHeightMm;
     if (options.seamAllowance) settings.includeSeamAllowance = true;
+    KnitMethod forcedMethod = KnitMethod::Flat;
+    const bool hasForcedMethod = !options.method.isEmpty();
+    if (hasForcedMethod && !knitMethodFromName(options.method, forcedMethod))
+    {
+        err << "--method must be flat, round, circular_machine or double_bed_machine.\n";
+        return 2;
+    }
+    if (options.needles >= 0) settings.shaping.machineNeedles = options.needles;
     if (!options.shapeOn.isEmpty())
     {
         if (options.shapeOn != QLatin1String("outside") && options.shapeOn != QLatin1String("every"))
@@ -128,6 +138,8 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
             pieceBands = {def};
         }
         const StitchGrid grid = StitchGrid::build(knittingOutline(source, piece.grainline), pieceBands, catalog);
+        ShapingOptions shaping = settings.shaping;
+        shaping.method = hasForcedMethod ? forcedMethod : methods.value(piece.name, settings.shaping.method);
         out << "\n== " << piece.name << " ==\n";
         if (grid.isEmpty())
         {
@@ -136,14 +148,15 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
         }
         out << grid.rowCount() << " rows, cast on " << grid.castOn() << ", widest " << grid.width()
             << ", bind off " << grid.bindOff()
+            << (isRound(shaping.method) ? QStringLiteral("  [%1]").arg(knitMethodName(shaping.method)) : QString())
             << (piece.grainline.isNull() ? "  [no grainline: drawn orientation used]" : "") << "\n";
         if (options.csv)
         {
-            out << rowTableCsv(grid, settings.shaping);
+            out << rowTableCsv(grid, shaping);
         }
         else
         {
-            out << writeInstructions(grid, settings.shaping).join(QLatin1Char('\n')) << "\n";
+            out << writeInstructions(grid, shaping).join(QLatin1Char('\n')) << "\n";
         }
     }
     return 0;
