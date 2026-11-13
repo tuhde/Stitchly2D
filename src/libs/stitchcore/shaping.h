@@ -20,13 +20,21 @@ struct ShapingOptions
     int edgeStitches = 1;       //!< plain stitches kept at each edge before a shaping stitch
 };
 
-/** Change of the left and right edge going from the previous row to this one. Positive = stitches added. */
+/**
+ * Change from the previous row to this one.
+ * Inside a band: left/right are stitches added (positive) or removed at each edge.
+ * At a band change (bandChange): the stitch type changes and the count goes from stitchesBefore to stitchesAfter;
+ * left and right are not used, because stitch positions of different bands cannot be compared.
+ */
 struct Shaping
 {
-    int row   = 0;
-    int left  = 0;
-    int right = 0;
-    int stitchesAfter = 0;
+    int  row   = 0;
+    int  left  = 0;
+    int  right = 0;
+    bool bandChange = false;
+    int  band  = 0;               //!< band that starts at this row (bandChange only)
+    int  stitchesBefore = 0;
+    int  stitchesAfter = 0;
 };
 
 /** A block of rows: either worked straight, or one shaping row. */

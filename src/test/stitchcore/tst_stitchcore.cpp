@@ -2,6 +2,7 @@
 
 #include "stitchsize.h"
 #include "stitchgrid.h"
+#include "stitchtype.h"
 #include "shaping.h"
 #include "instructions.h"
 
@@ -18,6 +19,10 @@ private slots:
     void invalidInput();
     void instructionsText();
     void csv();
+    void library();
+    void bandsRibThenStockinette();
+    void bandsDifferentRowHeights();
+    void bandsUnknownType();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -100,8 +105,75 @@ void TstStitchCore::csv()
 {
     const QPolygonF rect({{0, 0}, {100, 0}, {100, 30}, {0, 30}});
     const QString csv = rowTableCsv(StitchGrid::build(rect, g20x30()));
-    QVERIFY(csv.startsWith(QLatin1String("row;first stitch;count")));
+    QVERIFY(csv.startsWith(QLatin1String("row;band;stitch type;first stitch;count")));
     QCOMPARE(csv.count('\n'), 10); // header + 9 rows
+}
+
+void TstStitchCore::library()
+{
+    StitchLibrary lib = StitchLibrary::withDefaults();
+    QVERIFY(lib.contains("Stockinette"));
+    QVERIFY(!lib.find("2x2 rib").name.isEmpty());
+    QVERIFY(lib.find("nope").name.isEmpty());
+    const int n = lib.types().size();
+    lib.set({"Stockinette", StitchSize{4.0, 3.0}});   // replace, not add
+    QCOMPARE(lib.types().size(), n);
+    QCOMPARE(lib.find("Stockinette").size.stitchWidthMm, 4.0);
+    QVERIFY(lib.remove("Garter"));
+    QVERIFY(!lib.remove("Garter"));
+}
+
+void TstStitchCore::bandsRibThenStockinette()
+{
+    // 200 x 300 mm rectangle: 60 mm of rib (4 mm wide, 3 mm high), rest stockinette (5 mm wide, 3 mm high)
+    StitchLibrary lib;
+    lib.set({"rib", StitchSize{4.0, 3.0}});
+    lib.set({"st", StitchSize{5.0, 3.0}});
+    const QPolygonF rect({{0, 0}, {200, 0}, {200, 300}, {0, 300}});
+    const StitchGrid grid = StitchGrid::build(rect, {{"rib", 60}, {"st", 0}}, lib);
+    QCOMPARE(grid.bands().size(), 2);
+    QCOMPARE(grid.bands().at(0).rowCount, 20);
+    QCOMPARE(grid.bands().at(1).rowCount, 80);
+    QCOMPARE(grid.castOn(), 50);          // 200 / 4
+    QCOMPARE(grid.bindOff(), 40);         // 200 / 5
+    QCOMPARE(grid.rows().at(19).count, 50);
+    QCOMPARE(grid.rows().at(20).count, 40);
+    QCOMPARE(grid.rows().at(20).band, 1);
+
+    // Only one shaping entry: the band change, not an edge change.
+    const QVector<Shaping> sh = planShaping(grid);
+    QCOMPARE(sh.size(), 1);
+    QVERIFY(sh.first().bandChange);
+    QCOMPARE(sh.first().row, 20);
+    QCOMPARE(sh.first().stitchesBefore, 50);
+    QCOMPARE(sh.first().stitchesAfter, 40);
+
+    const QString text = writeInstructions(grid).join('\n');
+    QVERIFY(text.contains("change to st"));
+    QVERIFY(text.contains("decrease 10 stitches evenly"));
+    QVERIFY(text.contains("(rib)"));
+    QVERIFY(rowTableCsv(grid).contains(";rib;"));
+}
+
+void TstStitchCore::bandsDifferentRowHeights()
+{
+    StitchLibrary lib;
+    lib.set({"a", StitchSize{5.0, 2.0}});
+    lib.set({"b", StitchSize{5.0, 6.0}});
+    const QPolygonF rect({{0, 0}, {100, 0}, {100, 120}, {0, 120}});
+    const StitchGrid grid = StitchGrid::build(rect, {{"a", 60}, {"b", 60}}, lib);
+    QCOMPARE(grid.bands().at(0).rowCount, 30);
+    QCOMPARE(grid.bands().at(1).rowCount, 10);
+    QCOMPARE(grid.rowCount(), 40);
+    QVERIFY(planShaping(grid).first().bandChange);
+    QCOMPARE(planShaping(grid).first().stitchesBefore, planShaping(grid).first().stitchesAfter);
+}
+
+void TstStitchCore::bandsUnknownType()
+{
+    const QPolygonF rect({{0, 0}, {100, 0}, {100, 100}, {0, 100}});
+    QVERIFY(StitchGrid::build(rect, {{"missing", 0}}, StitchLibrary::withDefaults()).isEmpty());
+    QVERIFY(StitchGrid::build(rect, QVector<BandSpec>(), StitchLibrary::withDefaults()).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

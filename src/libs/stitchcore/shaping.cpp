@@ -13,6 +13,15 @@ QVector<Shaping> planShaping(const StitchGrid &grid)
         const Row &c = rows.at(i);
         Shaping s;
         s.row = i;
+        s.stitchesBefore = p.count;
+        if (c.band != p.band)
+        {
+            s.bandChange = true;
+            s.band = c.band;
+            s.stitchesAfter = c.count;
+            out.append(s);
+            continue;
+        }
         s.left = p.firstStitch - c.firstStitch;   // edge moved left = stitches added
         s.right = c.end() - p.end();
         s.stitchesAfter = c.count;

@@ -14,7 +14,7 @@ yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 
 1. Draft the pattern in Seamly2D and save it (`.sm2d`, plus the `.smis` measurements it refers to).
 2. Open it in Stitchly2D. Each pattern piece appears in the pieces list.
-3. Set the size of one stitch (its width and the height of one row, both in mm) and the shaping method for a piece or the whole project. Gauges per 10 cm or per inch are calculated from it, and you can enter either form.
+3. Define your stitch types. Each has the width of one stitch and the height of one row, both in mm, because these depend on the stitch type (stockinette, rib, ...). Gauges per 10 cm or per inch are calculated from them, and you can enter either form. Split a piece into bands along its height (for example a rib hem, then stockinette) and give each band a stitch type. Choose the shaping method.
 4. Stitchly2D lays the piece outline over a stitch grid, with the grainline as the knitting direction. Every row gets
    a stitch count, and the changes between rows become increases and decreases.
 5. Read the result on the canvas, as written instructions, or export it as TXT, SVG, PDF, PNG or a CSV row table.

@@ -1,6 +1,6 @@
 # Stitchly2D – plan
 
-Status 2026-11-13: skeleton done; `stitchcore` (stitch size, stitch grid, shaping, instructions, CSV) done with tests in `src/test/stitchcore`. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`. `vtools` is included because `ifc` and `vwidgets` depend on it; `tools` is left out. `stitchcore` and the app come next.
+Status 2026-11-13: skeleton done; `stitchcore` (stitch size, stitch types and bands, stitch grid, shaping, instructions, CSV) done with tests in `src/test/stitchcore`. Libs vendored from Seamly2D 476a5364d (see `NOTICE`) and building with `qmake6`. `vtools` is included because `ifc` and `vwidgets` depend on it; `tools` is left out. `stitchcore` and the app come next.
 
 ## Context
 Stitchly2D should take pattern files from Seamly2D (`.sm2d` + `.smis`) and prepare them for knitting. Crochet and embroidery follow later. The user wants the sources and framework close to Seamly2D so the look and feel match. The repo is empty (no commits). Seamly2D is at `/var/projects/Seamly2D`: GPLv3, qmake, Qt 6 widgets, static libs under `src/libs/*`, apps under `src/app/{seamly2d,seamlyme}`. Its branch `feature/knitting-grid` (commit 5fdd2e99c, by the same user) already adds a per-piece grid to Seamly2D. That is a good reference for grid anchoring and clipping to the seam line.
@@ -22,7 +22,9 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 - Build `VPiece` → `VLayoutPiece` (the same path layout export uses) to get the closed seam line and, optionally, the seam allowance polygon and grainline.
 
 ### 3. Knitting engine (`stitchcore`, unit-tested)
-- `StitchSize`: the stored size is the **width of one stitch and the height of one row, both in mm**, set per piece or for the whole project. Gauges (stitches and rows per 10 cm or per inch) are calculated from it on the fly, and the GUI accepts either form as input. There is no stored gauge.
+- `StitchSize`: the width of one stitch and the height of one row, both in mm. This is the stored form. Gauges (stitches and rows per 10 cm or per inch) are calculated from it on the fly, and the GUI accepts either form as input. There is no stored gauge.
+- `StitchType` / `StitchLibrary`: named stitch types (stockinette, 2x2 rib, ...), each with its own `StitchSize`, because width and height depend on the stitch type. The library is saved with the project.
+- `BandSpec`: a piece is split into horizontal bands along the knitting direction (for example a rib hem, then stockinette). Each band names a stitch type and a height in mm; the last band reaches the top. Width and row height are constant inside a band. Stitch positions are only comparable inside a band. At a band change only the stitch count carries over, so the planner emits a "change stitch type and adjust N stitches evenly" step instead of edge shaping.
 - `PieceOutline`: the piece polygon in mm, rotated so the grainline is vertical (grainline = knitting direction).
 - `StitchGrid`: for each row, take the horizontal span at the row's mid-height, scan across it and produce a stitch count and offset. Keep the result as a row list `{row, firstStitch, count}`.
 - `ShapingPlanner`: compare consecutive rows and emit increases and decreases, with a configurable method (`k2tog`, `ssk`, `M1`) and edge-stitch handling. Cast-on count comes from the first row and bind-off from the last.
@@ -31,7 +33,7 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 
 ### 4. GUI (first version)
 - File menu: open pattern (`.sm2d`) and the linked measurements. Recent files, like Seamly2D.
-- Pieces dock: list of pieces with checkboxes. Properties dock (`vpropertyexplorer`): stitch size, technique, shaping method, seam allowance on or off, edge stitches.
+- Pieces dock: list of pieces with checkboxes. Properties dock (`vpropertyexplorer`): stitch type library and the bands of the piece, technique, shaping method, seam allowance on or off, edge stitches.
 - Canvas: piece outline with the stitch grid overlay and the row/stitch count, modelled on `VGridItem` from the `feature/knitting-grid` branch.
 - Instructions tab: written pattern per piece (text, copyable).
 - Export: instructions as TXT, chart as SVG, PDF, PNG, and a CSV of the row table. Reuse `SvgGenerator` and Qt's PDF engine.

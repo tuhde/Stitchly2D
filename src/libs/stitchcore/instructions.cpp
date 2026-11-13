@@ -48,19 +48,41 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     {
         return lines;
     }
-    lines << QStringLiteral("Cast on %1 stitches.").arg(grid.castOn());
+    const bool multi = grid.bands().size() > 1;
+    lines << QStringLiteral("Cast on %1 stitches%2.").arg(grid.castOn())
+                 .arg(multi ? QStringLiteral(" and work in %1").arg(grid.bands().first().stitchType) : QString());
     for (const Segment &s : planSegments(grid))
     {
         const int first = s.firstRow + 1;
         if (!s.shaped)
         {
+            const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(s.firstRow).band).stitchType)
+                                       : QString();
             if (s.rows == 1)
             {
-                lines << QStringLiteral("Row %1: work even.").arg(first);
+                lines << QStringLiteral("Row %1%2: work even.").arg(first).arg(type);
             }
             else
             {
-                lines << QStringLiteral("Rows %1-%2: work even.").arg(first).arg(first + s.rows - 1);
+                lines << QStringLiteral("Rows %1-%2%3: work even.").arg(first).arg(first + s.rows - 1).arg(type);
+            }
+            continue;
+        }
+        if (s.shaping.bandChange)
+        {
+            const QString &name = grid.bands().at(s.shaping.band).stitchType;
+            if (s.shaping.stitchesBefore == s.shaping.stitchesAfter)
+            {
+                lines << QStringLiteral("Row %1: change to %2 (%3 stitches).")
+                             .arg(first).arg(name).arg(s.shaping.stitchesAfter);
+            }
+            else
+            {
+                const int d = s.shaping.stitchesAfter - s.shaping.stitchesBefore;
+                lines << QStringLiteral("Row %1: change to %2 and %3 %4 stitches evenly across the row (%5 -> %6 stitches).")
+                             .arg(first).arg(name)
+                             .arg(d > 0 ? QStringLiteral("increase") : QStringLiteral("decrease"))
+                             .arg(qAbs(d)).arg(s.shaping.stitchesBefore).arg(s.shaping.stitchesAfter);
             }
             continue;
         }
@@ -79,18 +101,18 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
 
 QString rowTableCsv(const StitchGrid &grid)
 {
-    QString csv = QStringLiteral("row;first stitch;count;change left;change right\n");
+    QString csv = QStringLiteral("row;band;stitch type;first stitch;count;change left;change right\n");
     const QVector<Row> &rows = grid.rows();
     for (int i = 0; i < rows.size(); ++i)
     {
         const Row &r = rows.at(i);
         int dl = 0, dr = 0;
-        if (i > 0)
+        if (i > 0 && rows.at(i - 1).band == r.band)
         {
             dl = rows.at(i - 1).firstStitch - r.firstStitch;
             dr = r.end() - rows.at(i - 1).end();
         }
-        csv += QStringLiteral("%1;%2;%3;%4;%5\n").arg(i + 1).arg(r.firstStitch).arg(r.count).arg(dl).arg(dr);
+        csv += QStringLiteral("%1;%2;%3;%4;%5;%6;%7\n").arg(i + 1).arg(r.band + 1).arg(grid.bands().at(r.band).stitchType).arg(r.firstStitch).arg(r.count).arg(dl).arg(dr);
     }
     return csv;
 }
