@@ -96,6 +96,7 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
         }
     }
 
+    QVector<qreal> xOrigin(res.size(), box.left());
     for (int b = 0; b < res.size(); ++b)
     {
         const Resolved &r = res.at(b);
@@ -117,6 +118,8 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
             qreal x0 = 0, x1 = 0;
             Row row;
             row.band = b;
+            row.y0Mm = r.y0 + i * step;
+            row.y1Mm = row.y0Mm + step;
             if (spanAt(outlineMm, r.y0 + (i + 0.5) * step, x0, x1))
             {
                 // Round the edge positions, not the width, so a straight edge never jitters by a stitch.
@@ -131,6 +134,7 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
             }
             rows.append(row);
         }
+        xOrigin[b] = box.left() + minFirst * sw;
         for (Row &row : rows)
         {
             if (row.count > 0)
@@ -163,6 +167,7 @@ StitchGrid StitchGrid::build(const QPolygonF &outlineMm, const QVector<BandSpec>
             GridBand gb;
             gb.stitchType = res.at(original).name;
             gb.size = res.at(original).size;
+            gb.xOriginMm = xOrigin.at(original);
             for (const Overlay &o : bands.at(res.at(original).spec).overlays)
             {
                 ResolvedOverlay ro;

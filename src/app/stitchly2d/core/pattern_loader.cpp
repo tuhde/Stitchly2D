@@ -1,5 +1,7 @@
 #include "pattern_loader.h"
 
+#include <algorithm>
+
 #include <QFileInfo>
 #include <QScopedPointer>
 #include <QSet>
@@ -202,6 +204,11 @@ bool loadPattern(const QString &fileName, LoadedPattern &out, QString *error, co
     {
         return fail(error, QString::fromLocal8Bit(e.what()));
     }
+
+    // The parser hands the pieces out in hash order; give them a stable order.
+    std::sort(out.pieces.begin(), out.pieces.end(), [](const LoadedPiece &a, const LoadedPiece &b) {
+        return QString::compare(a.name, b.name, Qt::CaseInsensitive) < 0;
+    });
 
     qApp->setCurrentDocument(nullptr);
     qApp->setCurrentData(nullptr);

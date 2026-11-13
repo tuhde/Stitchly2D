@@ -1,11 +1,13 @@
 // Stitchly2D - pattern preparation for knitting. GPLv3, see LICENSE.
 //
-// Command-line front end for now: loads a Seamly2D pattern and prints a stitch chart summary and the written
-// instructions for every piece. The main window follows.
+// Starts the main window. With --cli it loads a Seamly2D pattern and prints a stitch chart summary and the written
+// instructions for every piece instead, without needing a display.
 #include <QCommandLineParser>
 #include <QTextStream>
+#include <QTimer>
 
 #include "core/application_2d.h"
+#include "mainwindow.h"
 #include "core/pattern_loader.h"
 
 #include "../../libs/stitchcore/instructions.h"
@@ -22,8 +24,14 @@ int main(int argc, char *argv[])
     Q_INIT_RESOURCE(sounds);
     Q_INIT_RESOURCE(diagrams);
 
-    // No main window yet: run on the offscreen platform so no display is needed.
-    if (qgetenv("QT_QPA_PLATFORM").isEmpty())
+    // Command-line modes need no display: run on the offscreen platform (must be chosen before the application starts).
+    bool noDisplay = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        const QByteArray a(argv[i]);
+        noDisplay = noDisplay || a == "--cli" || a == "--screenshot" || a.startsWith("--screenshot=");
+    }
+    if (noDisplay && qgetenv("QT_QPA_PLATFORM").isEmpty())
     {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
@@ -32,7 +40,7 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Prepares Seamly2D patterns for knitting."));
     parser.addHelpOption();
-    parser.addPositionalArgument(QStringLiteral("pattern"), QStringLiteral("Seamly2D pattern (.sm2d)."));
+    parser.addPositionalArgument(QStringLiteral("pattern"), QStringLiteral("Seamly2D pattern (.sm2d), optional."));
     QCommandLineOption stitchW({QStringLiteral("w"), QStringLiteral("stitch-width")},
                                QStringLiteral("Width of one stitch in mm (default 5)."), QStringLiteral("mm"),
                                QStringLiteral("5"));
@@ -44,14 +52,42 @@ int main(int argc, char *argv[])
                             QStringLiteral("file"));
     QCommandLineOption allowance(QStringLiteral("seam-allowance"), QStringLiteral("Include the seam allowance."));
     QCommandLineOption csv(QStringLiteral("csv"), QStringLiteral("Print the row table as CSV instead of instructions."));
-    parser.addOptions({stitchW, rowH, meas, allowance, csv});
+    QCommandLineOption cli(QStringLiteral("cli"), QStringLiteral("Print the result as text instead of opening the window."));
+    QCommandLineOption shot(QStringLiteral("screenshot"),
+                            QStringLiteral("Open the window, save a picture of it to this file and quit."),
+                            QStringLiteral("file"));
+    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv});
     parser.process(app);
+
+    if (!parser.isSet(cli))
+    {
+        MainWindow window;
+        if (!parser.positionalArguments().isEmpty())
+        {
+            QString openError;
+            if (!window.openPattern(parser.positionalArguments().first(), &openError))
+            {
+                QTextStream(stderr) << "Could not load the pattern: " << openError << "\n";
+                if (parser.isSet(shot)) return 1;
+            }
+        }
+        window.show();
+        if (parser.isSet(shot))
+        {
+            const QString file = parser.value(shot);
+            QTimer::singleShot(300, &app, [&window, &app, file]() {
+                const bool ok = window.grab().save(file);
+                app.exit(ok ? 0 : 1);
+            });
+        }
+        return app.exec();
+    }
 
     QTextStream out(stdout);
     QTextStream err(stderr);
     if (parser.positionalArguments().size() != 1)
     {
-        err << "Give exactly one pattern file. See --help.\n";
+        err << "--cli needs exactly one pattern file. See --help.\n";
         return 2;
     }
     stitchcore::StitchSize size;

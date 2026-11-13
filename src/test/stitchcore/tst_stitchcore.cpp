@@ -40,6 +40,7 @@ private slots:
     void outlineUpright();
     void outlineRotated();
     void outlineNoGrainline();
+    void rowPositions();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -479,6 +480,22 @@ void TstStitchCore::outlineNoGrainline()
     QVERIFY(qAbs(out.boundingRect().height() - 100) < 1e-6);
     QVERIFY(near(out.at(0), QPointF(0, 100)));       // drawn top-left becomes top-left of a y-up chart
     QVERIFY(knittingOutline(QPolygonF(), QLineF()).isEmpty());
+}
+
+void TstStitchCore::rowPositions()
+{
+    // Trapezoid, 100 wide at the bottom: the cast-on row must start at x = 0 and the cells must tile the piece.
+    const QPolygonF trap({{50, 0}, {150, 0}, {200, 300}, {0, 300}});
+    const StitchGrid grid = StitchGrid::build(trap, g20x30());
+    QVERIFY(!grid.isEmpty());
+    QVERIFY(qAbs(grid.rows().first().y0Mm - 0.0) < 1e-6);
+    QVERIFY(qAbs(grid.rows().last().y1Mm - 300.0) < 1e-6);
+    for (int i = 1; i < grid.rowCount(); ++i)
+        QVERIFY(qAbs(grid.rows().at(i).y0Mm - grid.rows().at(i - 1).y1Mm) < 1e-6);
+    const GridBand &b = grid.bands().first();
+    const Row &first = grid.rows().first();
+    const qreal left = b.xOriginMm + first.firstStitch * b.size.stitchWidthMm;
+    QVERIFY(qAbs(left - 50.0) <= b.size.stitchWidthMm / 2 + 1e-6);   // within half a stitch of the real edge
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

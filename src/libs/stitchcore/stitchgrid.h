@@ -18,6 +18,8 @@ struct Row
     int band        = 0;
     int firstStitch = 0;
     int count       = 0;
+    qreal y0Mm      = 0;  //!< vertical extent of the row in the outline's coordinates (y up), for drawing
+    qreal y1Mm      = 0;
 
     int end() const { return firstStitch + count; }
 };
@@ -36,6 +38,7 @@ struct GridBand
     StitchSize              size;
     int                     firstRow = 0;
     int                     rowCount = 0;
+    qreal                   xOriginMm = 0;   //!< x of stitch 0 of this band's grid, in the outline's coordinates
     QVector<ResolvedOverlay> overlays;
 };
 
