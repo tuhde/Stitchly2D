@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include <QAction>
+#include <QBuffer>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -11,6 +12,8 @@
 #include <QHBoxLayout>
 #include <QGraphicsSimpleTextItem>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
@@ -30,6 +33,11 @@
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
+#include "mcp/mcp_integration.h"
+#include "mcp/mcp_panel.h"
+#ifdef STITCHLY_HAVE_QTERMWIDGET
+#include "mcp/claude_shell_panel.h"
+#endif
 #include "core/colors.h"
 #include "../../libs/stitchcore/instructions.h"
 #include "../../libs/stitchcore/pieceoutline.h"
@@ -72,6 +80,74 @@ MainWindow::MainWindow()
     createActions();
     statusBar()->showMessage(tr("Open a Seamly2D pattern (.sm2d) to start."));
     refresh();
+    initializeMcp();
+}
+
+void MainWindow::initializeMcp()
+{
+    m_mcp = new McpIntegration(this);
+
+    m_mcpStatus = new QLabel(this);
+    m_mcpStatus->setVisible(false);
+    statusBar()->addPermanentWidget(m_mcpStatus);
+
+    // "MCP Config and Log" dock: a tab next to the stitch settings, listed in the View menu.
+    McpPanel *mcpPanel = new McpPanel(m_mcp, this);
+    addDockWidget(Qt::RightDockWidgetArea, mcpPanel);
+    if (QDockWidget *settingsDock = findChild<QDockWidget *>(QStringLiteral("settingsDock")))
+    {
+        tabifyDockWidget(settingsDock, mcpPanel);
+    }
+    mcpPanel->hide();
+    m_viewMenu->addAction(mcpPanel->toggleViewAction());
+
+#ifdef STITCHLY_HAVE_QTERMWIDGET
+    // Dockable terminal that runs the Claude Code CLI against this window's MCP server (starts when first shown).
+    ClaudeShellPanel *shell = new ClaudeShellPanel(m_mcp, this);
+    addDockWidget(Qt::RightDockWidgetArea, shell);
+    if (QDockWidget *settingsDock = findChild<QDockWidget *>(QStringLiteral("settingsDock")))
+    {
+        tabifyDockWidget(settingsDock, shell);
+    }
+    resizeDocks({shell}, {520}, Qt::Horizontal);
+    shell->hide();
+    // Not toggleViewAction(): a restored layout can mark the shell as shown while its tab is behind another one.
+    // This entry always brings the tab to the front and hides the panel only if it is already in front.
+    QAction *shellAction = new QAction(tr("Claude shell"), this);
+    shellAction->setMenuRole(QAction::NoRole);
+    connect(shellAction, &QAction::triggered, shell, [shell]()
+    {
+        if (shell->isVisible())
+        {
+            shell->hide();
+        }
+        else
+        {
+            shell->show();
+            shell->raise();
+        }
+    });
+    m_viewMenu->addAction(shellAction);
+#endif
+
+    connect(m_mcp, &McpIntegration::stateChanged, this, [this]()
+    {
+        const QString text = m_mcp->statusText();
+        m_mcpStatus->setText(text);
+        m_mcpStatus->setVisible(!text.isEmpty());
+    });
+
+    m_mcp->startFromSettings();
+
+    // Test hook: open the panels at once (tests and demos cannot click through the menus).
+    if (qEnvironmentVariableIsSet("STITCHLY_MCP_SHOW_PANELS"))
+    {
+        mcpPanel->show();
+#ifdef STITCHLY_HAVE_QTERMWIDGET
+        shell->show();
+        shell->raise();
+#endif
+    }
 }
 
 void MainWindow::createActions()
@@ -89,6 +165,7 @@ void MainWindow::createActions()
     file->addAction(tr("&Quit"), this, &QWidget::close, QKeySequence::Quit);
 
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    m_viewMenu = viewMenu;
     QAction *fit = viewMenu->addAction(tr("Zoom to &fit"), this, &MainWindow::fitAll,
                                        QKeySequence(Qt::CTRL | Qt::Key_0));
     QAction *zin = viewMenu->addAction(tr("Zoom &in"), m_view, &VMainGraphicsView::zoomIn, QKeySequence::ZoomIn);
@@ -759,10 +836,7 @@ bool MainWindow::saveProject(const QString &fileName, QString *error)
     Project p;
     p.patternFile = m_pattern.fileName;
     p.measurementsFile = m_measurementsOverride.isEmpty() ? QString() : QFileInfo(m_measurementsOverride).absoluteFilePath();
-    p.settings.stitchType = m_stitchType->currentText() == kCustom ? QString() : m_stitchType->currentText();
-    p.settings.size = currentSize();
-    p.settings.includeSeamAllowance = m_allowance->isChecked();
-    p.settings.shaping = currentShaping();
+    p.settings = settings();
     for (auto it = m_bands.cbegin(); it != m_bands.cend(); ++it)
     {
         p.bands.insert(it.key(), it.value());
@@ -811,25 +885,9 @@ bool MainWindow::openProject(const QString &fileName, QString *error, CatalogCon
     StitchCatalog merged = m_catalog;
     mergeCatalog(merged, p.catalog, replace);
 
-    // Settings, then the catalog (which refreshes the stitch list), then the bands
-    m_updating = true;
-    m_allowance->setChecked(p.settings.includeSeamAllowance);
-    m_edgeStitches->setValue(p.settings.shaping.edgeStitches);
-    m_increase->setCurrentIndex(m_increase->findData(int(p.settings.shaping.increase)));
-    m_decrease->setCurrentIndex(m_decrease->findData(int(p.settings.shaping.decrease)));
-    m_updating = false;
+    // The catalog first (it refreshes the stitch list), then the settings, then the bands
     setCatalog(merged);
-
-    m_updating = true;
-    const StitchType named = merged.basics().find(p.settings.stitchType);
-    const bool sameAsCatalog = !p.settings.stitchType.isEmpty() && !named.name.isEmpty()
-                               && qFuzzyCompare(named.size.stitchWidthMm, p.settings.size.stitchWidthMm)
-                               && qFuzzyCompare(named.size.rowHeightMm, p.settings.size.rowHeightMm);
-    m_stitchType->setCurrentIndex(sameAsCatalog ? m_stitchType->findText(p.settings.stitchType)
-                                                : m_stitchType->findText(kCustom));
-    m_stitchWidth->setValue(p.settings.size.stitchWidthMm);
-    m_rowHeight->setValue(p.settings.size.rowHeightMm);
-    m_updating = false;
+    setSettings(p.settings);
 
     m_bands.clear();
     for (auto it = p.bands.cbegin(); it != p.bands.cend(); ++it)
@@ -1015,6 +1073,12 @@ void MainWindow::exportInstructions()
         return;
     }
     // All pieces, so the file is a complete knitting pattern.
+    saveText(tr("Export instructions"), tr("Text files (*.txt)"), QStringLiteral("instructions.txt"),
+             allInstructionsText());
+}
+
+QString MainWindow::allInstructionsText() const
+{
     QString text;
     for (const LoadedPiece &piece : m_pattern.pieces)
     {
@@ -1022,7 +1086,191 @@ void MainWindow::exportInstructions()
         text += QStringLiteral("== %1 ==\n").arg(piece.name);
         text += writeInstructions(grid, currentShaping()).join(QLatin1Char('\n')) + QStringLiteral("\n\n");
     }
-    saveText(tr("Export instructions"), tr("Text files (*.txt)"), QStringLiteral("instructions.txt"), text);
+    return text;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The window's state, for the Claude (MCP) tools. They act on exactly what the user sees.
+
+const LoadedPiece *MainWindow::findPiece(const QString &name) const
+{
+    for (const LoadedPiece &p : m_pattern.pieces)
+    {
+        if (p.name == name) return &p;
+    }
+    return nullptr;
+}
+
+QStringList MainWindow::pieceNames() const
+{
+    QStringList names;
+    for (const LoadedPiece &p : m_pattern.pieces) names << p.name;
+    return names;
+}
+
+QString MainWindow::currentPiece() const
+{
+    const int row = m_pieces->currentRow();
+    return row >= 0 && row < m_pattern.pieces.size() ? m_pattern.pieces.at(row).name : QString();
+}
+
+bool MainWindow::selectPiece(const QString &name)
+{
+    for (int i = 0; i < m_pattern.pieces.size(); ++i)
+    {
+        if (m_pattern.pieces.at(i).name == name)
+        {
+            m_pieces->setCurrentRow(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+ProjectSettings MainWindow::settings() const
+{
+    ProjectSettings s;
+    s.stitchType = m_stitchType->currentText() == kCustom ? QString() : m_stitchType->currentText();
+    s.size = currentSize();
+    s.includeSeamAllowance = m_allowance->isChecked();
+    s.shaping = currentShaping();
+    return s;
+}
+
+void MainWindow::setSettings(const ProjectSettings &s)
+{
+    m_updating = true;
+    m_allowance->setChecked(s.includeSeamAllowance);
+    m_edgeStitches->setValue(s.shaping.edgeStitches);
+    m_increase->setCurrentIndex(m_increase->findData(int(s.shaping.increase)));
+    m_decrease->setCurrentIndex(m_decrease->findData(int(s.shaping.decrease)));
+    // A catalog stitch is only shown by name when its size is the one wanted; otherwise it is a custom stitch.
+    const StitchType named = m_catalog.basics().find(s.stitchType);
+    const bool sameAsCatalog = !s.stitchType.isEmpty() && !named.name.isEmpty()
+                               && qFuzzyCompare(named.size.stitchWidthMm, s.size.stitchWidthMm)
+                               && qFuzzyCompare(named.size.rowHeightMm, s.size.rowHeightMm);
+    m_stitchType->setCurrentIndex(sameAsCatalog ? m_stitchType->findText(s.stitchType)
+                                                : m_stitchType->findText(kCustom));
+    m_stitchWidth->setValue(s.size.stitchWidthMm);
+    m_rowHeight->setValue(s.size.rowHeightMm);
+    m_updating = false;
+    refresh();
+}
+
+QVector<BandSpec> MainWindow::bands(const QString &piece) const
+{
+    const LoadedPiece *p = findPiece(piece);
+    return p ? bandsFor(*p) : QVector<BandSpec>();
+}
+
+bool MainWindow::setBands(const QString &piece, const QVector<BandSpec> &bands, QString *error)
+{
+    auto fail = [error](const QString &msg) {
+        if (error) *error = msg;
+        return false;
+    };
+    if (!findPiece(piece))
+    {
+        return fail(tr("No piece named \"%1\".").arg(piece));
+    }
+    if (bands.isEmpty())
+    {
+        return fail(tr("A piece needs at least one band."));
+    }
+    for (int i = 0; i < bands.size(); ++i)
+    {
+        const BandSpec &b = bands.at(i);
+        if (b.stitchType != kDefaultStitch && !m_catalog.basics().contains(b.stitchType))
+        {
+            return fail(tr("Band %1: unknown basic stitch \"%2\".").arg(i + 1).arg(b.stitchType));
+        }
+        if (b.heightMm < 0 || (i < bands.size() - 1 && b.heightMm <= 0))
+        {
+            return fail(tr("Band %1: only the last band may have no height.").arg(i + 1));
+        }
+        for (const Overlay &o : b.overlays)
+        {
+            if (!m_catalog.contains(o.pattern))
+            {
+                return fail(tr("Band %1: unknown pattern \"%2\".").arg(i + 1).arg(o.pattern));
+            }
+            if (o.firstRow < 0 || o.rowCount < 0 || o.firstStitch < 0 || o.stitchCount < 0)
+            {
+                return fail(tr("Band %1: rows and stitches of a pattern must not be negative.").arg(i + 1));
+            }
+        }
+    }
+    QVector<BandSpec> fixed = bands;
+    fixed.last().heightMm = 0;                   // the last band always reaches the top
+    m_bands.insert(piece, fixed);
+    if (piece == currentPiece())
+    {
+        populateBandTables();
+    }
+    refresh();
+    return true;
+}
+
+QJsonObject MainWindow::pieceSummary(const QString &name) const
+{
+    const LoadedPiece *piece = findPiece(name);
+    if (!piece)
+    {
+        return QJsonObject();
+    }
+    QPolygonF outline;
+    const StitchGrid grid = gridFor(*piece, &outline);
+    const QRectF box = outline.boundingRect();
+    QJsonArray bandList;
+    for (const GridBand &b : grid.bands())
+    {
+        bandList.append(QJsonObject{{QStringLiteral("stitchType"), b.stitchType},
+                                    {QStringLiteral("firstRow"), b.firstRow + 1},
+                                    {QStringLiteral("rows"), b.rowCount},
+                                    {QStringLiteral("stitchWidthMm"), b.size.stitchWidthMm},
+                                    {QStringLiteral("rowHeightMm"), b.size.rowHeightMm},
+                                    {QStringLiteral("patterns"), b.overlays.size()}});
+    }
+    return QJsonObject{{QStringLiteral("name"), piece->name},
+                       {QStringLiteral("widthMm"), qRound(box.width() * 10) / 10.0},
+                       {QStringLiteral("heightMm"), qRound(box.height() * 10) / 10.0},
+                       {QStringLiteral("hasGrainline"), !piece->grainline.isNull()},
+                       {QStringLiteral("hasStitches"), !grid.isEmpty()},
+                       {QStringLiteral("rows"), grid.rowCount()},
+                       {QStringLiteral("castOn"), grid.castOn()},
+                       {QStringLiteral("widestRow"), grid.width()},
+                       {QStringLiteral("bindOff"), grid.bindOff()},
+                       {QStringLiteral("bands"), bandList}};
+}
+
+QStringList MainWindow::instructionsFor(const QString &piece) const
+{
+    const LoadedPiece *p = findPiece(piece);
+    return p ? writeInstructions(gridFor(*p), currentShaping()) : QStringList();
+}
+
+QString MainWindow::rowTableFor(const QString &piece) const
+{
+    const LoadedPiece *p = findPiece(piece);
+    return p ? rowTableCsv(gridFor(*p)) : QString();
+}
+
+QByteArray MainWindow::screenshotPng()
+{
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    grab().save(&buffer, "PNG");
+    return bytes;
+}
+
+QJsonObject MainWindow::mcpProjectInfo() const
+{
+    return QJsonObject{{QStringLiteral("file"), m_pattern.fileName},
+                       {QStringLiteral("project"), m_projectFile},
+                       {QStringLiteral("modified"), false},     // there is no unsaved-changes tracking yet
+                       {QStringLiteral("selectedPiece"), currentPiece()},
+                       {QStringLiteral("pieceCount"), m_pattern.pieces.size()}};
 }
 
 void MainWindow::exportRowTable()

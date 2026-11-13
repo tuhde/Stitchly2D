@@ -39,6 +39,19 @@ struct PatternDef
      */
     QJsonObject toJson() const;
     static bool fromJson(const QJsonObject &json, PatternDef &out, QString *error = nullptr);
+
+    /**
+     * The repeat as a chart of text: one list per row, top row first, an empty string where the base stitch is left
+     * alone. This is what the catalog editor shows.
+     */
+    QVector<QStringList> toChart() const;
+
+    /**
+     * Builds a pattern from such a chart. The legend is made of the texts in order of appearance (top row first, left
+     * to right). All rows must have the same length; at least one cell must be filled in.
+     */
+    static bool fromChart(const QString &name, Kind kind, const QVector<QStringList> &rowsTopFirst, PatternDef &out,
+                          QString *error = nullptr);
 };
 
 /** Where and how a pattern is laid over a band. */

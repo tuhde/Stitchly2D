@@ -1,5 +1,7 @@
 # ADD TO EACH PATH $$PWD VARIABLE!!!!!!
 
+include(mcp/mcp.pri)
+
 SOURCES += \
     $$PWD/main.cpp \
     $$PWD/mainwindow.cpp \

@@ -2,10 +2,14 @@ Stitchly2D vendors the shared libraries of Seamly2D (GPLv3)
 https://github.com/FashionFreedom/Seamly2D (fork used: tuhde/Seamly2D)
 Copied from commit 476a5364d8d4f555071161980725814d3339ab45 (2026-11-05):
   qmuparser vpropertyexplorer ifc vlayout vgeometry vpatterndb vmisc vwidgets
-  vformat vtools vobj vdxf fervor tools
-Omitted: vmcp, vtest. vmcp is still to be copied (AI integration, see docs/PLAN.md).
+  vformat vtools vobj vdxf fervor tools vmcp
+Omitted: vtest.
 Patched after copying: tools/images/image_tool.cpp includes the Stitchly2D application header instead of the
 Seamly2D one. src/app/stitchly2d/xml/vpattern.* is copied from src/app/seamly2d/xml; the ImageTool block in
 parseImage (background images) is removed. core/application_2d.h is a shim that keeps the upstream class name.
 Build with Qt 6 (qmake6); Seamly2D no longer builds against Qt 5.
 Keep the copied libs unmodified where possible so upstream diffs stay easy.
+AI integration: libs/vmcp is copied unchanged except that names and the directory of running windows say
+Stitchly2D ("stitchly2d-mcp"). src/app/stitchly2d/mcp/{mcp_integration,mcp_panel,claude_shell_panel} are copied from
+src/app/seamly2d/mcp and adapted (environment variables STITCHLY_MCP*, texts, the tools); stitch_tools.cpp is new.
+Seamly2D's pattern_editor (the drawing tools) is not used.

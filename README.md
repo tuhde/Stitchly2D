@@ -63,17 +63,18 @@ pattern. Pieces are turned so their grainline is vertical. `--cli` needs no disp
 
 | Path | Content |
 |---|---|
-| `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, ...). Kept unmodified where possible so changes can be compared with upstream. |
+| `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, `vmcp`, ...). Kept unmodified where possible so changes can be compared with upstream. |
 | `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping (planned). |
 | `src/app/stitchly2d/` | The program: main window, pattern loader (running Seamly2D's parser without a window) and the `--cli` mode. The main window. |
 | `docs/PLAN.md` | Design and roadmap. |
 | `NOTICE` | Which Seamly2D commit the libraries come from. |
 
-## AI integration (planned)
+## AI integration
 
-Like our Seamly2D fork, Stitchly2D will contain an optional Model Context Protocol server so that Claude can load a
-pattern, set the stitch size, read the stitch grid and export instructions in the running window. It will be off by default,
-listen on `127.0.0.1` only, require a token and ask before touching files.
+Like our Seamly2D fork, Stitchly2D contains an optional Model Context Protocol server, so that Claude can open a
+pattern, set the stitch size, add stitches and patterns to the catalog, give pieces bands and patterns, and read the
+instructions in the running window. It is off by default, listens on `127.0.0.1` only (port 47801), requires a token
+and asks before touching files. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md).
 
 ## License
 

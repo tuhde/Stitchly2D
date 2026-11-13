@@ -13,6 +13,16 @@
 #include <QTabWidget>
 #include <QTemporaryDir>
 
+#include <QEventLoop>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+
+#include "../../app/stitchly2d/mcp/mcp_integration.h"
+#include "../../libs/vmcp/mcptoolregistry.h"
 #include "../../app/stitchly2d/catalog_dialog.h"
 #include "../../app/stitchly2d/core/application_2d.h"
 #include "../../app/stitchly2d/mainwindow.h"
@@ -39,8 +49,18 @@ private slots:
     void projectRoundTrip();
     void projectCatalogConflict();
     void projectErrorsKeepState();
+    void toolsLookAndSettings();
+    void toolsCatalog();
+    void toolsBands();
+    void toolsFiles();
+    void toolsWithoutPattern();
+    void toolsOverHttp();
 
 private:
+    McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
+    {
+        return window->mcp()->callTool(tool, args);
+    }
     void select(const QString &piece);
     template <typename T> T *find(const QString &name) { return window->findChild<T *>(name); }
     QScopedPointer<MainWindow> window;
@@ -458,6 +478,292 @@ void TstMainWindow::projectErrorsKeepState()
     QVERIFY(!QFile::exists(dir.filePath("none.stitchly")));
 }
 
+void TstMainWindow::toolsLookAndSettings()
+{
+    McpToolResult r = call("get_project_info");
+    QVERIFY(!r.isError);
+    const QJsonObject info = r.structured.toObject();
+    QCOMPARE(info["pieces"].toArray().size(), 17);
+    QCOMPARE(info["settings"].toObject()["stitchType"].toString(), QString("Stockinette"));
+    QVERIFY(info["basicStitches"].toArray().contains("Patent"));
+    QVERIFY(info["patterns"].toArray().contains("Seed stitch"));
+
+    r = call("list_pieces");
+    const QJsonArray pieces = r.structured.toObject()["pieces"].toArray();
+    QCOMPARE(pieces.size(), 17);
+    bool foundCuff = false;
+    for (const QJsonValue &v : pieces)
+    {
+        if (v.toObject()["name"].toString() == "Cuff")
+        {
+            foundCuff = true;
+            QCOMPARE(v.toObject()["castOn"].toInt(), 58);
+            QCOMPARE(v.toObject()["rows"].toInt(), 17);
+        }
+    }
+    QVERIFY(foundCuff);
+
+    // settings: a catalog stitch takes its size, a typed size makes it custom
+    r = call("set_stitch_settings", {{"stitchType", "Garter"}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(r.structured.toObject()["rowHeightMm"].toDouble(), 2.5);
+    r = call("set_stitch_settings", {{"stitchWidthMm", 4.0}, {"includeSeamAllowance", true}, {"edgeStitches", 2},
+                                     {"increase", "kfb"}, {"decrease", "k2tog"}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(r.structured.toObject()["stitchWidthMm"].toDouble(), 4.0);
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Custom"));
+    QVERIFY(find<QCheckBox>("allowanceCheck")->isChecked());
+    QCOMPARE(find<QSpinBox>("edgeStitchesSpin")->value(), 2);
+    QCOMPARE(window->settings().shaping.increase, IncreaseMethod::KFB);
+    QVERIFY(window->settings().shaping.decrease == DecreaseMethod::K2tog);
+    // bad input is refused and changes nothing
+    QVERIFY(call("set_stitch_settings", {{"stitchWidthMm", 0}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"stitchWidthMm", 500}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"stitchType", "Nonexistent"}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"increase", "bogus"}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"edgeStitches", 11}}).isError);
+    QCOMPARE(window->settings().size.stitchWidthMm, 4.0);
+
+    // selecting and reading a piece
+    QVERIFY(call("select_piece", {{"piece", "nope"}}).isError);
+    QVERIFY(!call("select_piece", {{"piece", "Cuff"}}).isError);
+    QCOMPARE(window->currentPiece(), QString("Cuff"));
+    r = call("get_instructions");
+    QVERIFY(r.text.startsWith("Cast on"));
+    QCOMPARE(call("get_instructions", {{"piece", "Cuff"}}).text, r.text);
+    QVERIFY(call("get_instructions", {{"piece", "nope"}}).isError);
+    QVERIFY(call("get_row_table", {{"piece", "Cuff"}}).text.startsWith("row;band;stitch type"));
+
+    // the picture
+    r = call("screenshot");
+    QVERIFY(!r.isError);
+    QVERIFY(r.imagePng.startsWith("\x89PNG"));
+}
+
+void TstMainWindow::toolsCatalog()
+{
+    QJsonObject catalog = call("get_catalog").structured.toObject();
+    QVERIFY(catalog["basicStitches"].toArray().size() >= 5);
+    // a chart is listed top row first, like a knitting chart
+    QJsonObject seed;
+    for (const QJsonValue &v : catalog["patterns"].toArray())
+        if (v.toObject()["name"].toString() == "Seed stitch") seed = v.toObject();
+    QCOMPARE(seed["rows"].toArray().at(0).toArray().at(0).toString(), QString("p"));
+
+    McpToolResult r = call("set_pattern", {{"name", "Zigzag"}, {"kind", "special"},
+                                           {"rows", QJsonArray{QJsonArray{"k", "p"}, QJsonArray{"p", "k"}}}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QVERIFY(window->catalog().contains("Zigzag"));
+    QCOMPARE(window->catalog().find("Zigzag").toChart(), QVector<QStringList>({{"k", "p"}, {"p", "k"}}));
+    // the pattern is then in the band editor's list
+    select("Cuff");
+    find<QPushButton>("addOverlayButton")->click();
+    auto *combo = qobject_cast<QComboBox *>(find<QTableWidget>("overlayTable")->cellWidget(0, 0));
+    QVERIFY(combo->findData("Zigzag") >= 0);
+    combo->setCurrentIndex(combo->findData("Zigzag"));                // use it, so that deleting it matters below
+    QVERIFY(window->instructionsText().contains("k x1, p x1"));
+    // replacing keeps one entry
+    QVERIFY(!call("set_pattern", {{"name", "Zigzag"}, {"kind", "color"}, {"rows", QJsonArray{QJsonArray{"A", "B"}}}}).isError);
+    QCOMPARE(window->catalog().find("Zigzag").width, 2);
+    QCOMPARE(int(window->catalog().find("Zigzag").kind), int(PatternDef::Color));
+
+    QVERIFY(call("set_pattern", {{"name", "X"}, {"kind", "weird"}, {"rows", QJsonArray{QJsonArray{"k"}}}}).isError);
+    QVERIFY(call("set_pattern", {{"name", "X"}, {"kind", "special"},
+                                 {"rows", QJsonArray{QJsonArray{"k", "p"}, QJsonArray{"k"}}}}).isError);      // ragged
+    QVERIFY(call("set_pattern", {{"name", "X"}, {"kind", "special"}, {"rows", QJsonArray{QJsonArray{"", ""}}}}).isError);
+    QVERIFY(call("set_pattern", {{"name", ""}, {"kind", "special"}, {"rows", QJsonArray{QJsonArray{"k"}}}}).isError);
+    QVERIFY(!window->catalog().contains("X"));
+
+    // basic stitches
+    QVERIFY(!call("set_basic_stitch", {{"name", "Moss"}, {"stitchWidthMm", 4.5}, {"rowHeightMm", 3.0}}).isError);
+    QCOMPARE(window->catalog().basics().find("Moss").size.stitchWidthMm, 4.5);
+    QVERIFY(call("set_basic_stitch", {{"name", "Default stitch"}, {"stitchWidthMm", 4}, {"rowHeightMm", 3}}).isError);
+    QVERIFY(call("set_basic_stitch", {{"name", "Bad"}, {"stitchWidthMm", 0}, {"rowHeightMm", 3}}).isError);
+    QVERIFY(call("set_basic_stitch", {{"name", ""}, {"stitchWidthMm", 4}, {"rowHeightMm", 3}}).isError);
+    // deleting takes it off the bands
+    select("Cuff");
+    QVERIFY(!call("delete_pattern", {{"name", "Zigzag"}}).isError);
+    QVERIFY(!window->catalog().contains("Zigzag"));
+    QCOMPARE(find<QTableWidget>("overlayTable")->rowCount(), 0);
+    QVERIFY(call("delete_pattern", {{"name", "Zigzag"}}).isError);
+    QVERIFY(!call("delete_basic_stitch", {{"name", "Moss"}}).isError);
+    QVERIFY(call("delete_basic_stitch", {{"name", "Moss"}}).isError);
+}
+
+void TstMainWindow::toolsBands()
+{
+    const QJsonArray bands{
+        QJsonObject{{"stitchType", "2:2 rib"}, {"heightMm", 20}},
+        QJsonObject{{"stitchType", "Default stitch"},
+                    {"patterns", QJsonArray{QJsonObject{{"pattern", "Stripes 2 rows"}, {"rowCount", 6}}}}}};
+    McpToolResult r = call("set_bands", {{"piece", "Cuff"}, {"bands", bands}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(window->currentPiece(), QString("Cuff"));                // shown to the user
+    QCOMPARE(find<QTableWidget>("bandTable")->rowCount(), 2);
+    const QString text = window->instructionsText();
+    QVERIFY2(text.contains("(2:2 rib)"), qPrintable(text));
+    QVERIFY2(text.contains("change to Default stitch"), qPrintable(text));
+    QCOMPARE(call("get_instructions", {{"piece", "Cuff"}}).text, text);
+
+    r = call("get_bands", {{"piece", "Cuff"}});
+    const QJsonArray back = r.structured.toObject()["bands"].toArray();
+    QCOMPARE(back.size(), 2);
+    QCOMPARE(back.at(0).toObject()["heightMm"].toDouble(), 20.0);
+    QCOMPARE(back.at(1).toObject()["patterns"].toArray().at(0).toObject()["rowCount"].toInt(), 6);
+
+    // the same bands again after the change is idempotent; bad input is refused and changes nothing
+    const QString before = window->instructionsText();
+    QVERIFY(call("set_bands", {{"piece", "Cuff"}, {"bands", QJsonArray()}}).isError);
+    QVERIFY(call("set_bands", {{"piece", "Cuff"}, {"bands", QJsonArray{QJsonObject{{"stitchType", "Nope"}}}}}).isError);
+    QVERIFY(call("set_bands", {{"piece", "Cuff"},
+                               {"bands", QJsonArray{QJsonObject{{"stitchType", "Default stitch"},
+                                                                {"patterns", QJsonArray{QJsonObject{{"pattern", "Nope"}}}}}}}}).isError);
+    QVERIFY(call("set_bands", {{"piece", "Cuff"},      // a band that is not the last needs a height
+                               {"bands", QJsonArray{QJsonObject{{"stitchType", "Garter"}},
+                                                    QJsonObject{{"stitchType", "Default stitch"}}}}}).isError);
+    QVERIFY(call("set_bands", {{"piece", "Nope"}, {"bands", bands}}).isError);
+    QVERIFY(call("set_bands", {{"piece", "Cuff"},
+                               {"bands", QJsonArray{QJsonObject{{"stitchType", "Default stitch"},
+                                                                {"patterns", QJsonArray{QJsonObject{{"pattern", "Seed stitch"}, {"firstRow", -1}}}}}}}}).isError);
+    QCOMPARE(window->instructionsText(), before);
+
+    // a single band with the last one's height ignored
+    r = call("set_bands", {{"piece", "Cuff"}, {"bands", QJsonArray{QJsonObject{{"stitchType", "Garter"}, {"heightMm", 15}}}}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(window->bands("Cuff").first().heightMm, 0.0);
+    QCOMPARE(find<QTableWidget>("bandTable")->rowCount(), 1);
+}
+
+void TstMainWindow::toolsFiles()
+{
+    QTemporaryDir dir;
+    QVERIFY(!call("set_bands", {{"piece", "Cuff"},
+                                {"bands", QJsonArray{QJsonObject{{"stitchType", "Default stitch"},
+                                                                 {"patterns", QJsonArray{QJsonObject{{"pattern", "Stripes 2 rows"}}}}}}}}).isError);
+    const QString project = dir.filePath("t.stitchly");
+    McpToolResult r = call("save_project", {{"path", project}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QVERIFY(QFileInfo::exists(project));
+    r = call("save_project", {{"path", dir.filePath("noext")}});             // gets the suffix
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QVERIFY(QFileInfo::exists(dir.filePath("noext.stitchly")));
+
+    select("Pocket");
+    r = call("open_project", {{"path", project}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    select("Cuff");
+    QVERIFY(window->instructionsText().contains("A x"));
+    QVERIFY(call("open_project", {{"path", dir.filePath("missing.stitchly")}}).isError);
+
+    r = call("export_instructions", {{"path", dir.filePath("knit.txt")}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QFile f(dir.filePath("knit.txt"));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(f.readAll());
+    QVERIFY(text.contains("== Cuff =="));
+    QVERIFY(text.contains("== FrontPanel =="));
+    r = call("export_row_table", {{"path", dir.filePath("rows.csv")}, {"piece", "Cuff"}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QVERIFY(QFileInfo(dir.filePath("rows.csv")).size() > 50);
+    QVERIFY(call("export_row_table", {{"path", dir.filePath("x.csv")}, {"piece", "Nope"}}).isError);
+    QVERIFY(call("export_instructions", {{"path", ""}}).isError);
+
+    // opening a pattern starts a new project
+    r = call("open_pattern", {{"path", QStringLiteral(TEST_DATA_DIR "/patterns/trousers_gl.sm2d")}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(window->pieceNames().size(), 11);
+    QVERIFY(window->projectFile().isEmpty());
+    QVERIFY(call("open_pattern", {{"path", dir.filePath("missing.sm2d")}}).isError);
+    QCOMPARE(window->pieceNames().size(), 11);                             // unchanged
+}
+
+void TstMainWindow::toolsWithoutPattern()
+{
+    MainWindow empty;
+    auto run = [&empty](const QString &tool, const QJsonObject &args = QJsonObject()) {
+        return empty.mcp()->callTool(tool, args);
+    };
+    McpToolResult r = run("get_instructions");
+    QVERIFY(r.isError);
+    QVERIFY2(r.text.contains("open_pattern"), qPrintable(r.text));
+    QVERIFY(run("get_row_table").isError);
+    QVERIFY(run("get_bands").isError);
+    QVERIFY(run("save_project", {{"path", "/nonexistent/x.stitchly"}}).isError);
+    QVERIFY(run("select_piece", {{"piece", "x"}}).isError);
+    QVERIFY(!run("get_project_info").isError);                              // always works
+    QVERIFY(run("list_pieces").structured.toObject()["pieces"].toArray().isEmpty());
+    QVERIFY(!run("get_catalog").isError);
+    QVERIFY(!run("set_stitch_settings", {{"stitchWidthMm", 4}}).isError);   // the settings exist without a pattern
+}
+
+void TstMainWindow::toolsOverHttp()
+{
+    McpIntegration *mcp = window->mcp();
+    QVERIFY(!mcp->isRunning());                                             // off until switched on
+    QVERIFY(mcp->start(0));
+    QVERIFY(mcp->isRunning());
+    QCOMPARE(mcp->token(), QString("test-token"));
+    QVERIFY(mcp->port() > 0);
+    QVERIFY(mcp->claudeCodeCommand().contains("stitchly2d"));
+    QVERIFY(mcp->mcpJsonSnippet().contains("Bearer test-token"));
+
+    QNetworkAccessManager network;
+    auto post = [&](const QJsonObject &body, const QByteArray &token, int *status) {
+        QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/mcp").arg(mcp->port())));
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setRawHeader("Accept", "application/json, text/event-stream");
+        if (!token.isEmpty()) request.setRawHeader("Authorization", "Bearer " + token);
+        QNetworkReply *reply = network.post(request, QJsonDocument(body).toJson());
+        QEventLoop loop;
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        loop.exec();
+        *status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QJsonObject json = QJsonDocument::fromJson(reply->readAll()).object();
+        reply->deleteLater();
+        return json;
+    };
+    auto rpc = [](int id, const QString &method, const QJsonObject &params = QJsonObject()) {
+        return QJsonObject{{"jsonrpc", "2.0"}, {"id", id}, {"method", method}, {"params", params}};
+    };
+
+    int status = 0;
+    post(rpc(1, "initialize", {{"protocolVersion", "2025-03-26"}, {"capabilities", QJsonObject()},
+                               {"clientInfo", QJsonObject{{"name", "test"}, {"version", "1"}}}}), "wrong", &status);
+    QCOMPARE(status, 401);                                                  // no access without the token
+
+    QJsonObject init = post(rpc(1, "initialize", {{"protocolVersion", "2025-03-26"}, {"capabilities", QJsonObject()},
+                                                  {"clientInfo", QJsonObject{{"name", "test"}, {"version", "1"}}}}),
+                            "test-token", &status);
+    QCOMPARE(status, 200);
+    QCOMPARE(init["result"].toObject()["serverInfo"].toObject()["name"].toString(), QString("stitchly2d"));
+    QVERIFY(init["result"].toObject()["instructions"].toString().contains("knitting"));
+
+    const QJsonObject list = post(rpc(2, "tools/list"), "test-token", &status);
+    QCOMPARE(status, 200);
+    QStringList names;
+    for (const QJsonValue &t : list["result"].toObject()["tools"].toArray()) names << t.toObject()["name"].toString();
+    for (const QString &expected : {"get_project_info", "set_stitch_settings", "set_bands", "set_pattern",
+                                    "get_instructions", "save_project", "screenshot", "list_patterns"})
+    {
+        QVERIFY2(names.contains(expected), qPrintable(expected));
+    }
+    QVERIFY(!names.contains("add_point"));                                   // no Seamly2D drawing tools here
+
+    // a change through the connection shows in the window
+    const QJsonObject changed = post(rpc(3, "tools/call", {{"name", "set_stitch_settings"},
+                                                           {"arguments", QJsonObject{{"stitchType", "Patent"}}}}),
+                                     "test-token", &status);
+    QCOMPARE(status, 200);
+    QVERIFY(!changed["result"].toObject()["isError"].toBool());
+    QCOMPARE(find<QComboBox>("stitchTypeCombo")->currentText(), QString("Patent"));
+    const QJsonObject instructions = post(rpc(4, "tools/call", {{"name", "get_instructions"},
+                                                                {"arguments", QJsonObject{{"piece", "Cuff"}}}}),
+                                          "test-token", &status);
+    QVERIFY(instructions["result"].toObject()["content"].toArray().at(0).toObject()["text"].toString().startsWith("Cast on"));
+    mcp->stop();
+    QVERIFY(!mcp->isRunning());
+}
+
 int main(int argc, char *argv[])
 {
     Q_INIT_RESOURCE(schema);
@@ -467,6 +773,12 @@ int main(int argc, char *argv[])
     Q_INIT_RESOURCE(sounds);
     Q_INIT_RESOURCE(diagrams);
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // The tests must not touch the user's settings, catalog or the list of running windows.
+    QTemporaryDir isolated;
+    qputenv("XDG_CONFIG_HOME", (isolated.path() + QStringLiteral("/config")).toUtf8());
+    qputenv("STITCHLY_MCP_INSTANCE_DIR", (isolated.path() + QStringLiteral("/instances")).toUtf8());
+    qputenv("STITCHLY_MCP_TOKEN", "test-token");
+    qputenv("STITCHLY_MCP_ASSUME_YES", "1");        // no dialog can be clicked in a test
     Application2D app(argc, argv);
     TstMainWindow test;
     return QTest::qExec(&test, argc, argv);

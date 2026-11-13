@@ -42,6 +42,8 @@ private slots:
     void outlineRotated();
     void outlineNoGrainline();
     void rowPositions();
+    void chartRoundTrip();
+    void chartErrors();
     void projectRoundTrip();
     void projectErrors();
     void projectUsedCatalog();
@@ -501,6 +503,45 @@ void TstStitchCore::rowPositions()
     const Row &first = grid.rows().first();
     const qreal left = b.xOriginMm + first.firstStitch * b.size.stitchWidthMm;
     QVERIFY(qAbs(left - 50.0) <= b.size.stitchWidthMm / 2 + 1e-6);   // within half a stitch of the real edge
+}
+
+void TstStitchCore::chartRoundTrip()
+{
+    // the default seed stitch: bottom row k p, top row p k
+    const PatternDef seed = StitchCatalog::withDefaults().find("Seed stitch");
+    const QVector<QStringList> chart = seed.toChart();
+    QCOMPARE(chart.size(), 2);
+    QCOMPARE(chart.at(0), QStringList({"p", "k"}));       // top row first
+    QCOMPARE(chart.at(1), QStringList({"k", "p"}));
+    PatternDef back;
+    QString error;
+    QVERIFY2(PatternDef::fromChart("Seed stitch", PatternDef::Special, chart, back, &error), qPrintable(error));
+    QCOMPARE(back.toChart(), chart);
+    QVERIFY(back.isValid());
+    QCOMPARE(back.legend, QStringList({"p", "k"}));       // legend in order of appearance
+    // gaps stay gaps
+    QVERIFY(PatternDef::fromChart("Gap", PatternDef::Color, {{"A", ""}, {"", "B"}}, back, &error));
+    QCOMPARE(back.cells, QVector<int>({-1, 1, 0, -1}));
+    QCOMPARE(back.toChart(), QVector<QStringList>({{"A", ""}, {"", "B"}}));
+    // names are trimmed, texts too
+    QVERIFY(PatternDef::fromChart("  Spaces ", PatternDef::Color, {{" A ", "A"}}, back, &error));
+    QCOMPARE(back.name, QString("Spaces"));
+    QCOMPARE(back.legend, QStringList({"A"}));
+}
+
+void TstStitchCore::chartErrors()
+{
+    PatternDef out; out.name = "untouched";
+    QString error;
+    QVERIFY(!PatternDef::fromChart("", PatternDef::Special, {{"k"}}, out, &error));
+    QVERIFY(error.contains("no name"));
+    QVERIFY(!PatternDef::fromChart("x", PatternDef::Special, {}, out, &error));
+    QVERIFY(!PatternDef::fromChart("x", PatternDef::Special, {QStringList()}, out, &error));
+    QVERIFY(!PatternDef::fromChart("x", PatternDef::Special, {{"k", "p"}, {"k"}}, out, &error));
+    QVERIFY(error.contains("row 2"));
+    QVERIFY(!PatternDef::fromChart("x", PatternDef::Special, {{"", " "}, {"", ""}}, out, &error));
+    QVERIFY(error.contains("fill in"));
+    QCOMPARE(out.name, QString("untouched"));              // failures leave the output alone
 }
 
 static Project sampleProject(const QString &dir)

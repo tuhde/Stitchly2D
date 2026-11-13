@@ -3,6 +3,7 @@
 #define MAINWINDOW_H
 
 #include <QHash>
+#include <QJsonObject>
 #include <QMainWindow>
 
 #include "core/pattern_loader.h"
@@ -11,6 +12,7 @@
 #include "../../libs/stitchcore/shaping.h"
 #include "../../libs/stitchcore/stitchgrid.h"
 
+class McpIntegration;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -18,6 +20,7 @@ class QLabel;
 class QPushButton;
 class QTableWidget;
 class QListWidget;
+class QMenu;
 class QPlainTextEdit;
 class QSpinBox;
 class VMainGraphicsScene;
@@ -52,6 +55,25 @@ public:
     bool saveProject(const QString &fileName, QString *error = nullptr);
 
     QString projectFile() const { return m_projectFile; }
+
+    // ---- The window's state for the Claude (MCP) tools. They act on exactly what the user sees.
+    QStringList pieceNames() const;
+    QString currentPiece() const;
+    bool selectPiece(const QString &name);
+    stitchcore::ProjectSettings settings() const;
+    void setSettings(const stitchcore::ProjectSettings &settings);
+    QVector<stitchcore::BandSpec> bands(const QString &piece) const;
+    /** Replace the bands of a piece. Checked against the catalog; the last band always reaches the top. */
+    bool setBands(const QString &piece, const QVector<stitchcore::BandSpec> &bands, QString *error = nullptr);
+    /** Size, stitch counts and bands of a piece with the current settings (empty object for an unknown piece). */
+    QJsonObject pieceSummary(const QString &piece) const;
+    QStringList instructionsFor(const QString &piece) const;
+    QString rowTableFor(const QString &piece) const;
+    QString allInstructionsText() const;
+    QByteArray screenshotPng();
+    /** Small description of this window for the window list of the Claude connection. */
+    QJsonObject mcpProjectInfo() const;
+    McpIntegration *mcp() const { return m_mcp; }
 
     /** Instructions of the selected piece, for tests and screenshots. */
     QString instructionsText() const;
@@ -96,6 +118,8 @@ private:
     void refresh();
     stitchcore::StitchSize currentSize() const;
     stitchcore::ShapingOptions currentShaping() const;
+    const LoadedPiece *findPiece(const QString &name) const;
+    void initializeMcp();
     QVector<stitchcore::BandSpec> bandsFor(const LoadedPiece &piece) const;
     stitchcore::StitchCatalog workingCatalog() const;
     stitchcore::StitchGrid gridFor(const LoadedPiece &piece, QPolygonF *outline = nullptr) const;
@@ -128,6 +152,9 @@ private:
     QPushButton        *m_removeOverlay = nullptr;
     QPlainTextEdit     *m_instructions = nullptr;
     bool                m_updating = false;
+    QMenu              *m_viewMenu = nullptr;
+    McpIntegration     *m_mcp = nullptr;
+    QLabel             *m_mcpStatus = nullptr;
     QString             m_projectFile;
     QString             m_measurementsOverride;
 };

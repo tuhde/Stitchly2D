@@ -111,6 +111,76 @@ bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
     return true;
 }
 
+QVector<QStringList> PatternDef::toChart() const
+{
+    QVector<QStringList> rows;
+    for (int y = height - 1; y >= 0; --y)      // top row first
+    {
+        QStringList row;
+        for (int x = 0; x < width; ++x)
+        {
+            const int idx = cells.value(y * width + x, -1);
+            row << (idx >= 0 && idx < legend.size() ? legend.at(idx) : QString());
+        }
+        rows.append(row);
+    }
+    return rows;
+}
+
+bool PatternDef::fromChart(const QString &name, Kind kind, const QVector<QStringList> &rowsTopFirst, PatternDef &out,
+                           QString *error)
+{
+    auto fail = [error](const QString &msg) {
+        if (error) *error = msg;
+        return false;
+    };
+    const QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty())
+    {
+        return fail(QStringLiteral("the pattern has no name"));
+    }
+    if (rowsTopFirst.isEmpty() || rowsTopFirst.first().isEmpty())
+    {
+        return fail(QStringLiteral("%1: the chart has no cells").arg(trimmedName));
+    }
+    PatternDef p;
+    p.name = trimmedName;
+    p.kind = kind;
+    p.height = rowsTopFirst.size();
+    p.width = rowsTopFirst.first().size();
+    p.cells.fill(-1, p.width * p.height);
+    for (int i = 0; i < p.height; ++i)
+    {
+        if (rowsTopFirst.at(i).size() != p.width)
+        {
+            return fail(QStringLiteral("%1: row %2 has %3 cells, expected %4")
+                            .arg(trimmedName).arg(i + 1).arg(rowsTopFirst.at(i).size()).arg(p.width));
+        }
+        const int y = p.height - 1 - i;
+        for (int x = 0; x < p.width; ++x)
+        {
+            const QString text = rowsTopFirst.at(i).at(x).trimmed();
+            if (text.isEmpty())
+            {
+                continue;
+            }
+            int idx = p.legend.indexOf(text);
+            if (idx < 0)
+            {
+                p.legend << text;
+                idx = p.legend.size() - 1;
+            }
+            p.cells[y * p.width + x] = idx;
+        }
+    }
+    if (p.legend.isEmpty())
+    {
+        return fail(QStringLiteral("%1: the chart has no stitches or colors, fill in at least one cell").arg(trimmedName));
+    }
+    out = p;
+    return true;
+}
+
 StitchCatalog StitchCatalog::withDefaults()
 {
     StitchCatalog c;

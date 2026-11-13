@@ -31,6 +31,11 @@ void Application2D::openSettings()
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     QDir().mkpath(dir);
     m_settings = new VSettings(dir + QStringLiteral("/stitchly2d.ini"), QSettings::IniFormat, this);
+    // Seamly2D's default port is 47800. Use the next one, so both programs can offer Claude's connection at once.
+    if (!m_settings->contains(QStringLiteral("mcp/port")))
+    {
+        m_settings->setValue(QStringLiteral("mcp/port"), 47801);
+    }
 }
 
 bool Application2D::isAppInGUIMode() const
