@@ -13,11 +13,15 @@ namespace stitchcore
 enum class IncreaseMethod { M1, YarnOver, KFB };
 enum class DecreaseMethod { K2tog_Ssk, K2tog };
 
+/** On which rows the edges are shaped. Row 1 is an outside row, then they alternate: inside, outside, ... */
+enum class ShapingRows { OutsideRows, EveryRow };
+
 struct ShapingOptions
 {
     IncreaseMethod increase = IncreaseMethod::M1;
     DecreaseMethod decrease = DecreaseMethod::K2tog_Ssk;
     int edgeStitches = 1;       //!< plain stitches kept at each edge before a shaping stitch
+    ShapingRows shapeOn = ShapingRows::OutsideRows;   //!< flat knitting: shaping is normally done on outside rows
     int bulkFrom = 4;           //!< a change of at least this many stitches at one edge is cast on / bound off
                                 //!< instead of increased / decreased in one row; 0 = never
 };
@@ -48,8 +52,16 @@ struct Segment
     Shaping shaping;
 };
 
-QVector<Shaping> planShaping(const StitchGrid &grid);
-QVector<Segment> planSegments(const StitchGrid &grid);
+/**
+ * The shaping rows of a piece. With ShapingRows::OutsideRows a change that the outline needs on an inside row is
+ * worked on the outside row before it (the first inside row: the one after it), so the stitch total is right from
+ * then on; changes of two rows that end up on the same row are added. Changes of the stitch type are never moved.
+ */
+QVector<Shaping> planShaping(const StitchGrid &grid, ShapingRows rows = ShapingRows::EveryRow);
+QVector<Segment> planSegments(const StitchGrid &grid, ShapingRows rows = ShapingRows::EveryRow);
+
+/** Stitches on the needle after each row, following the plan (differs from the outline's count between moved rows). */
+QVector<int> plannedCounts(const StitchGrid &grid, ShapingRows rows = ShapingRows::EveryRow);
 
 }
 

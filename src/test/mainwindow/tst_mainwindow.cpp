@@ -1,5 +1,6 @@
 // Drives the real main window: loads a sample pattern, edits bands and patterns, checks the instructions.
 #include <QtTest>
+#include <QRegularExpression>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -65,6 +66,7 @@ private slots:
     void closingAsksFirst();
     void undoByClaude();
     void bulkFromSetting();
+    void shapeOnSetting();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -1018,6 +1020,8 @@ void TstMainWindow::undoByClaude()
 void TstMainWindow::bulkFromSetting()
 {
     select("FrontPanel");
+    auto *shapeOn = find<QComboBox>("shapeOnCombo");
+    shapeOn->setCurrentIndex(shapeOn->findData(int(ShapingRows::EveryRow)));       // these numbers are for shaping on every row
     const QString standard = window->instructionsText();
     QVERIFY2(standard.contains("cast on 12 stitches at right edge"), qPrintable(standard));
     QVERIFY(standard.contains("every row"));                                  // regular shaping in one line
@@ -1046,6 +1050,55 @@ void TstMainWindow::bulkFromSetting()
     MainWindow other;
     QVERIFY(other.openProject(dir.filePath("s.stitchly"), &error, MainWindow::CatalogConflict::KeepMine));
     QCOMPARE(other.findChild<QSpinBox *>("bulkFromSpin")->value(), 13);
+}
+
+void TstMainWindow::shapeOnSetting()
+{
+    select("FrontPanel");
+    auto *shapeOn = find<QComboBox>("shapeOnCombo");
+    QCOMPARE(shapeOn->currentData().toInt(), int(ShapingRows::OutsideRows));         // the default
+    const QString outside = window->instructionsText();
+    QVERIFY2(outside.contains("Row 1 is an outside row"), qPrintable(outside));
+    // every shaping line in the text is on an outside row (odd row number)
+    QRegularExpression shapingRow("^Rows? (\\d+)(?:-\\d+)?[^:]*: (?:keep|cast on|bind off)");
+    int shapingLines = 0;
+    for (const QString &line : outside.split('\n'))
+    {
+        const QRegularExpressionMatch m = shapingRow.match(line);
+        if (m.hasMatch())
+        {
+            ++shapingLines;
+            QCOMPARE(m.captured(1).toInt() % 2, 1);
+        }
+    }
+    QVERIFY(shapingLines > 3);
+
+    shapeOn->setCurrentIndex(shapeOn->findData(int(ShapingRows::EveryRow)));
+    const QString every = window->instructionsText();
+    QVERIFY(!every.contains("outside row"));
+    QVERIFY(every != outside);
+    QCOMPARE(window->undoTexts().first(), QString("Change stitch settings"));
+    window->undo();
+    QCOMPARE(window->instructionsText(), outside);
+    QCOMPARE(shapeOn->currentData().toInt(), int(ShapingRows::OutsideRows));
+
+    // the row table in the file is the one of the plan
+    const QString table = call("get_row_table", {{"piece", "FrontPanel"}}).text;
+    QVERIFY(table.startsWith("row;band;stitch type"));
+    // Claude
+    McpToolResult r = call("set_stitch_settings", {{"shapeOn", "every"}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(r.structured.toObject()["shapeOn"].toString(), QString("every"));
+    QCOMPARE(shapeOn->currentData().toInt(), int(ShapingRows::EveryRow));
+    QVERIFY(call("set_stitch_settings", {{"shapeOn", "sideways"}}).isError);
+    QCOMPARE(shapeOn->currentData().toInt(), int(ShapingRows::EveryRow));
+    // saved in the project
+    QTemporaryDir dir;
+    QString error;
+    QVERIFY(window->saveProject(dir.filePath("p.stitchly"), &error));
+    MainWindow other;
+    QVERIFY(other.openProject(dir.filePath("p.stitchly"), &error, MainWindow::CatalogConflict::KeepMine));
+    QCOMPARE(other.findChild<QComboBox *>("shapeOnCombo")->currentData().toInt(), int(ShapingRows::EveryRow));
 }
 
 int main(int argc, char *argv[])

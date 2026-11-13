@@ -3,40 +3,103 @@
 namespace stitchcore
 {
 
-QVector<Shaping> planShaping(const StitchGrid &grid)
+QVector<Shaping> planShaping(const StitchGrid &grid, ShapingRows shapeOn)
 {
     QVector<Shaping> out;
     const QVector<Row> &rows = grid.rows();
-    for (int i = 1; i < rows.size(); ++i)
+    const int n = rows.size();
+    if (n < 2)
+    {
+        return out;
+    }
+    // What the outline asks for on each row; band changes are kept apart.
+    QVector<int> left(n, 0), right(n, 0);
+    QVector<bool> bandChange(n, false);
+    for (int i = 1; i < n; ++i)
     {
         const Row &p = rows.at(i - 1);
         const Row &c = rows.at(i);
-        Shaping s;
-        s.row = i;
-        s.stitchesBefore = p.count;
         if (c.band != p.band)
         {
-            s.bandChange = true;
-            s.band = c.band;
-            s.stitchesAfter = c.count;
-            out.append(s);
+            bandChange[i] = true;
             continue;
         }
-        s.left = p.firstStitch - c.firstStitch;   // edge moved left = stitches added
-        s.right = c.end() - p.end();
-        s.stitchesAfter = c.count;
-        if (s.left != 0 || s.right != 0)
+        left[i] = p.firstStitch - c.firstStitch;      // edge moved left = stitches added
+        right[i] = c.end() - p.end();
+    }
+    if (shapeOn == ShapingRows::OutsideRows)
+    {
+        for (int i = 1; i < n; i += 2)                // the inside rows: rows 2, 4, ... (indices 1, 3, ...)
         {
+            if (left[i] == 0 && right[i] == 0)
+            {
+                continue;
+            }
+            int target = -1;
+            if (i - 1 >= 1 && !bandChange[i - 1])
+                target = i - 1;                       // the outside row before
+            else if (i + 1 < n && !bandChange[i + 1])
+                target = i + 1;                       // the first row has no shaping row before it
+            if (target >= 0)
+            {
+                left[target] += left[i];
+                right[target] += right[i];
+                left[i] = right[i] = 0;
+            }
+        }
+    }
+    int running = rows.first().count;
+    for (int i = 1; i < n; ++i)
+    {
+        Shaping s;
+        s.row = i;
+        s.stitchesBefore = running;
+        if (bandChange[i])
+        {
+            s.bandChange = true;
+            s.band = rows.at(i).band;
+            running = rows.at(i).count;
+            s.stitchesAfter = running;
+            out.append(s);
+        }
+        else if (left[i] != 0 || right[i] != 0)
+        {
+            s.left = left[i];
+            s.right = right[i];
+            running += left[i] + right[i];
+            s.stitchesAfter = running;
             out.append(s);
         }
     }
     return out;
 }
 
-QVector<Segment> planSegments(const StitchGrid &grid)
+QVector<int> plannedCounts(const StitchGrid &grid, ShapingRows shapeOn)
+{
+    QVector<int> counts(grid.rowCount(), 0);
+    if (grid.isEmpty())
+    {
+        return counts;
+    }
+    int running = grid.rows().first().count;
+    int next = 0;
+    const QVector<Shaping> plan = planShaping(grid, shapeOn);
+    for (int i = 0; i < grid.rowCount(); ++i)
+    {
+        if (next < plan.size() && plan.at(next).row == i)
+        {
+            running = plan.at(next).stitchesAfter;
+            ++next;
+        }
+        counts[i] = running;
+    }
+    return counts;
+}
+
+QVector<Segment> planSegments(const StitchGrid &grid, ShapingRows shapeOn)
 {
     QVector<Segment> segs;
-    const QVector<Shaping> shaping = planShaping(grid);
+    const QVector<Shaping> shaping = planShaping(grid, shapeOn);
     int next = 0;
     for (const Shaping &s : shaping)
     {

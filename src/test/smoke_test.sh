@@ -31,4 +31,11 @@ over=$("$BIN" --cli "$DATA/cuff.stitchly" --piece Cuff -w 5 2>/dev/null)
 echo "$over" | grep -q "default stitch 5 x row 3 mm" || fail "-w must override the project's stitch width"
 if "$BIN" --cli "$DATA/cuff.stitchly" --piece Nope >/dev/null 2>&1; then fail "unknown --piece must fail"; fi
 if "$BIN" --cli "$DATA/missing.stitchly" >/dev/null 2>&1; then fail "missing project must fail"; fi
+# shaping on outside rows (default) or on every row; an unknown value is refused
+every=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece FrontPanel --shape-on every 2>/dev/null)
+outside=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece FrontPanel 2>/dev/null)
+echo "$outside" | grep -q "Row 1 is an outside row" || fail "default must shape on outside rows"
+echo "$every" | grep -q "outside row" && fail "--shape-on every must not mention outside rows"
+[ "$every" != "$outside" ] || fail "--shape-on must change the instructions"
+if "$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --shape-on sideways >/dev/null 2>&1; then fail "bad --shape-on must fail"; fi
 echo "OK"

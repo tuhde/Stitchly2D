@@ -1,6 +1,7 @@
 #include "instructions.h"
 
 #include <QCoreApplication>
+#include <QHash>
 
 namespace stitchcore
 {
@@ -101,7 +102,13 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     const bool multi = grid.bands().size() > 1;
     lines << QStringLiteral("Cast on %1 stitches%2.").arg(grid.castOn())
                  .arg(multi ? QStringLiteral(" and work in %1").arg(grid.bands().first().stitchType) : QString());
-    const QVector<Segment> segments = planSegments(grid);
+    const QVector<Segment> segments = planSegments(grid, options.shapeOn);
+    bool anyShaping = false;
+    for (const Segment &t : segments) anyShaping = anyShaping || (t.shaped && !t.shaping.bandChange);
+    if (anyShaping && options.shapeOn == ShapingRows::OutsideRows)
+    {
+        lines << QStringLiteral("Row 1 is an outside row. Increases and decreases are worked on outside rows only.");
+    }
     for (int si = 0; si < segments.size(); ++si)
     {
         const Segment &s = segments.at(si);
@@ -214,20 +221,19 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     return lines;
 }
 
-QString rowTableCsv(const StitchGrid &grid)
+QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options)
 {
     QString csv = QStringLiteral("row;band;stitch type;first stitch;count;change left;change right\n");
     const QVector<Row> &rows = grid.rows();
+    const QVector<int> counts = plannedCounts(grid, options.shapeOn);
+    QHash<int, Shaping> plan;
+    for (const Shaping &s : planShaping(grid, options.shapeOn)) plan.insert(s.row, s);
     for (int i = 0; i < rows.size(); ++i)
     {
         const Row &r = rows.at(i);
-        int dl = 0, dr = 0;
-        if (i > 0 && rows.at(i - 1).band == r.band)
-        {
-            dl = rows.at(i - 1).firstStitch - r.firstStitch;
-            dr = r.end() - rows.at(i - 1).end();
-        }
-        csv += QStringLiteral("%1;%2;%3;%4;%5;%6;%7\n").arg(i + 1).arg(r.band + 1).arg(grid.bands().at(r.band).stitchType).arg(r.firstStitch).arg(r.count).arg(dl).arg(dr);
+        const Shaping s = plan.value(i);              // no entry = no change
+        csv += QStringLiteral("%1;%2;%3;%4;%5;%6;%7\n").arg(i + 1).arg(r.band + 1).arg(grid.bands().at(r.band).stitchType)
+                   .arg(r.firstStitch).arg(counts.at(i)).arg(s.bandChange ? 0 : s.left).arg(s.bandChange ? 0 : s.right);
     }
     return csv;
 }

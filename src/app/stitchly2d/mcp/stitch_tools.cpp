@@ -116,6 +116,7 @@ QJsonObject settingsJson(const ProjectSettings &s)
                        {QStringLiteral("includeSeamAllowance"), s.includeSeamAllowance},
                        {QStringLiteral("edgeStitches"), s.shaping.edgeStitches},
                        {QStringLiteral("bulkFrom"), s.shaping.bulkFrom},
+                       {QStringLiteral("shapeOn"), s.shaping.shapeOn == ShapingRows::EveryRow ? QStringLiteral("every") : QStringLiteral("outside")},
                        {QStringLiteral("increase"), increaseText(s.shaping.increase)},
                        {QStringLiteral("decrease"), decreaseText(s.shaping.decrease)}};
 }
@@ -318,6 +319,8 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 {QStringLiteral("includeSeamAllowance"), flag(QStringLiteral("Knit the outline with seam allowance."))},
                 {QStringLiteral("edgeStitches"), integer(QStringLiteral("Plain stitches kept at each edge before shaping."))},
                 {QStringLiteral("bulkFrom"), integer(QStringLiteral("A change of at least this many stitches at one edge is cast on or bound off instead of increased or decreased in one row; 0 = never."))},
+                {QStringLiteral("shapeOn"), oneOf({QStringLiteral("outside"), QStringLiteral("every")},
+                                                  QStringLiteral("Rows on which the edges are shaped: outside rows only (row 1 is an outside row; a change needed on an inside row is worked on the outside row before it) or every row."))},
                 {QStringLiteral("increase"), oneOf({QStringLiteral("m1"), QStringLiteral("yarnover"), QStringLiteral("kfb")},
                                                    QStringLiteral("How increases are worked."))},
                 {QStringLiteral("decrease"), oneOf({QStringLiteral("k2tog_ssk"), QStringLiteral("k2tog")},
@@ -356,6 +359,13 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 const int n = a.value(QStringLiteral("edgeStitches")).toInt(-1);
                 if (n < 0 || n > 10) return McpToolResult::error(QStringLiteral("edgeStitches must be between 0 and 10."));
                 s.shaping.edgeStitches = n;
+            }
+            if (has(a, "shapeOn"))
+            {
+                const QString v = text(a, "shapeOn");
+                if (v == QLatin1String("outside")) s.shaping.shapeOn = ShapingRows::OutsideRows;
+                else if (v == QLatin1String("every")) s.shaping.shapeOn = ShapingRows::EveryRow;
+                else return McpToolResult::error(QStringLiteral("shapeOn must be outside or every."));
             }
             if (has(a, "bulkFrom"))
             {

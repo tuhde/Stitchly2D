@@ -119,6 +119,7 @@ bool saveProject(const QString &path, const Project &p, QString *error)
                          {"includeSeamAllowance", p.settings.includeSeamAllowance},
                          {"edgeStitches", p.settings.shaping.edgeStitches},
                          {"bulkFrom", p.settings.shaping.bulkFrom},
+                         {"shapeOn", p.settings.shaping.shapeOn == ShapingRows::EveryRow ? "every" : "outside"},
                          {"increase", increaseName(p.settings.shaping.increase)},
                          {"decrease", decreaseName(p.settings.shaping.decrease)}};
 
@@ -206,6 +207,13 @@ bool loadProject(const QString &path, Project &project, QString *error)
     {
         return fail(error, QStringLiteral("the number of edge stitches must not be negative"));
     }
+    // Files from before this setting existed were made with shaping on every row.
+    const QString shapeOn = s.value("shapeOn").toString(QStringLiteral("every"));
+    if (shapeOn != QLatin1String("every") && shapeOn != QLatin1String("outside"))
+    {
+        return fail(error, QStringLiteral("shapeOn must be \"outside\" or \"every\""));
+    }
+    out.settings.shaping.shapeOn = shapeOn == QLatin1String("outside") ? ShapingRows::OutsideRows : ShapingRows::EveryRow;
     out.settings.shaping.bulkFrom = s.value("bulkFrom").toInt(4);      // files from before this setting: the default
     if (out.settings.shaping.bulkFrom < 0)
     {
@@ -298,7 +306,7 @@ bool operator==(const ProjectSettings &a, const ProjectSettings &b)
     return a.stitchType == b.stitchType && sameSize(a.size, b.size)
            && a.includeSeamAllowance == b.includeSeamAllowance && a.shaping.edgeStitches == b.shaping.edgeStitches
            && a.shaping.increase == b.shaping.increase && a.shaping.decrease == b.shaping.decrease
-           && a.shaping.bulkFrom == b.shaping.bulkFrom;
+           && a.shaping.bulkFrom == b.shaping.bulkFrom && a.shaping.shapeOn == b.shaping.shapeOn;
 }
 
 bool sameCatalog(const StitchCatalog &a, const StitchCatalog &b)

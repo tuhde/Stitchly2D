@@ -55,6 +55,10 @@ private slots:
     void irregularShapingStaysSeparate();
     void patternRowsAreNotCompressed();
     void bulkFromInProjects();
+    void outsideRowsMoveChanges();
+    void outsideRowsEdgeCases();
+    void outsideRowsTextAndTable();
+    void shapeOnInProjects();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -798,6 +802,7 @@ void TstStitchCore::bulkChanges()
 void TstStitchCore::regularShapingIsOneLine()
 {
     ShapingOptions o;
+    o.shapeOn = ShapingRows::EveryRow;
     // one stitch every 4 rows: 4 mm rows, 5 mm stitches, the right edge moves 5 mm per 16 mm
     const QPolygonF slope({{0, 0}, {200, 0}, {150, 160}, {0, 160}});
     StitchGrid grid = StitchGrid::build(slope, StitchSize{5.0, 4.0});
@@ -835,6 +840,7 @@ void TstStitchCore::regularShapingIsOneLine()
 void TstStitchCore::irregularShapingStaysSeparate()
 {
     ShapingOptions o;
+    o.shapeOn = ShapingRows::EveryRow;
     // two shaping rows only, or three at uneven distances, are written one by one
     const QPolygonF two({{0, 0}, {100, 0}, {100, 40}, {95, 40}, {95, 80}, {90, 80}, {90, 160}, {0, 160}});
     QString text = writeInstructions(StitchGrid::build(two, StitchSize{5.0, 4.0}), o).join('\n');
@@ -892,6 +898,146 @@ void TstStitchCore::bulkFromInProjects()
     QFile n(dir.filePath("neg.stitchly")); QVERIFY(n.open(QIODevice::WriteOnly));
     n.write(QJsonDocument(root).toJson()); n.close();
     QVERIFY(!loadProject(dir.filePath("neg.stitchly"), q, &error));
+}
+
+static int sumChanges(const QVector<Shaping> &plan)
+{
+    int sum = 0;
+    for (const Shaping &s : plan) if (!s.bandChange) sum += s.left + s.right;
+    return sum;
+}
+
+void TstStitchCore::outsideRowsMoveChanges()
+{
+    // one stitch narrower on every row
+    const QPolygonF slope({{0, 0}, {200, 0}, {150, 50}, {0, 50}});
+    const StitchGrid grid = StitchGrid::build(slope, StitchSize{5.0, 5.0});
+    const QVector<Shaping> every = planShaping(grid, ShapingRows::EveryRow);
+    const QVector<Shaping> outside = planShaping(grid, ShapingRows::OutsideRows);
+    QVERIFY(every.size() >= 8);
+    QVERIFY(outside.size() < every.size());
+    for (const Shaping &s : outside)
+        QVERIFY2(s.row % 2 == 0, qPrintable(QString("shaping on inside row %1").arg(s.row + 1)));   // row 1 = index 0 is outside
+    QCOMPARE(sumChanges(outside), sumChanges(every));              // nothing lost
+    // the stitch count on the needle ends where the outline ends
+    const QVector<int> counts = plannedCounts(grid, ShapingRows::OutsideRows);
+    QCOMPARE(counts.size(), grid.rowCount());
+    QCOMPARE(counts.last(), grid.bindOff());
+    QCOMPARE(counts.first(), grid.castOn());
+    // and it never differs from the outline by more than the one row that was moved
+    const QVector<int> exact = plannedCounts(grid, ShapingRows::EveryRow);
+    for (int i = 0; i < counts.size(); ++i)
+        QVERIFY2(qAbs(counts.at(i) - exact.at(i)) <= 2, qPrintable(QString("row %1").arg(i + 1)));
+    for (int i = 0; i < exact.size(); ++i) QCOMPARE(exact.at(i), grid.rows().at(i).count);   // every row follows the outline exactly
+    // the changes of the inside row were added to the outside row before it
+    int twos = 0;
+    for (const Shaping &s : outside) twos += (s.right == -2) ? 1 : 0;
+    QVERIFY(twos >= 3);
+    // segments and counts still describe the whole piece
+    int rows = 0;
+    for (const Segment &seg : planSegments(grid, ShapingRows::OutsideRows)) rows += seg.rows;
+    QCOMPARE(rows, grid.rowCount());
+}
+
+void TstStitchCore::outsideRowsEdgeCases()
+{
+    // a change on the first inside row (row 2) goes to row 3: there is no shaping row before it
+    const StitchSize size{5.0, 5.0};
+    const StitchGrid early = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 5}, {90, 5}, {90, 40}, {0, 40}}), size);
+    QVector<Shaping> plan = planShaping(early, ShapingRows::OutsideRows);
+    QCOMPARE(plan.size(), 1);
+    QCOMPARE(plan.first().row, 2);
+    QCOMPARE(plan.first().right, -2);
+    // a change on the last row (an inside row when the count is even) goes to the outside row before it
+    const StitchGrid late = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 35}, {90, 35}, {90, 40}, {0, 40}}), size);
+    QCOMPARE(late.rowCount() % 2, 0);
+    plan = planShaping(late, ShapingRows::OutsideRows);
+    QCOMPARE(plan.last().row, late.rowCount() - 2);
+    QCOMPARE(plannedCounts(late, ShapingRows::OutsideRows).last(), late.bindOff());
+    // pieces without changes, and with one row only, have no plan
+    QVERIFY(planShaping(StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {0, 100}}), size), ShapingRows::OutsideRows).isEmpty());
+    QVERIFY(planShaping(StitchGrid(), ShapingRows::OutsideRows).isEmpty());
+    QVERIFY(plannedCounts(StitchGrid(), ShapingRows::OutsideRows).isEmpty());
+
+    // a change of the stitch type stays where the outline has it, even on an inside row
+    StitchLibrary lib;
+    lib.set({"rib", StitchSize{4.0, 5.0}});
+    lib.set({"st", StitchSize{5.0, 5.0}});
+    const StitchGrid bands = StitchGrid::build(QPolygonF({{0, 0}, {200, 0}, {200, 100}, {0, 100}}),
+                                               {BandSpec{"rib", 15, {}}, BandSpec{"st", 0, {}}}, lib);
+    plan = planShaping(bands, ShapingRows::OutsideRows);
+    QVector<int> changeRows;
+    for (const Shaping &s : plan) if (s.bandChange) changeRows << s.row;
+    QCOMPARE(changeRows, QVector<int>({3}));                          // the 4th row, an inside row: not moved
+    QCOMPARE(plannedCounts(bands, ShapingRows::OutsideRows).last(), bands.bindOff());
+}
+
+void TstStitchCore::outsideRowsTextAndTable()
+{
+    const QPolygonF slope({{0, 0}, {200, 0}, {150, 160}, {0, 160}});
+    const StitchGrid grid = StitchGrid::build(slope, StitchSize{5.0, 4.0});
+    ShapingOptions o;                                                    // outside rows is the default
+    QVERIFY(o.shapeOn == ShapingRows::OutsideRows);
+    QStringList lines = writeInstructions(grid, o);
+    QVERIFY2(lines.at(1).startsWith("Row 1 is an outside row"), qPrintable(lines.join('\n')));
+    QVERIFY2(lines.join('\n').contains("every 4th row"), qPrintable(lines.join('\n')));
+    // shaping rows in the text are all outside rows, i.e. odd row numbers
+    QRegularExpression single("^Row (\\d+): ");
+    for (const QString &line : lines)
+    {
+        const QRegularExpressionMatch m = single.match(line);
+        if (m.hasMatch() && line.contains("decrease")) QCOMPARE(m.captured(1).toInt() % 2, 1);
+    }
+    o.shapeOn = ShapingRows::EveryRow;
+    QVERIFY(!writeInstructions(grid, o).join('\n').contains("outside row"));       // nothing to explain
+    // a piece without shaping needs no explanation either
+    QVERIFY(!writeInstructions(StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {0, 100}}), StitchSize{5.0, 4.0}),
+                               ShapingOptions()).join('\n').contains("outside row"));
+
+    // the row table follows the plan: counts and changes as worked, shaping only on outside rows
+    const QStringList csv = rowTableCsv(grid, ShapingOptions()).split('\n', Qt::SkipEmptyParts);
+    const QVector<int> counts = plannedCounts(grid, ShapingRows::OutsideRows);
+    QCOMPARE(csv.size(), grid.rowCount() + 1);
+    for (int i = 0; i < grid.rowCount(); ++i)
+    {
+        const QStringList f = csv.at(i + 1).split(';');
+        QCOMPARE(f.at(4).toInt(), counts.at(i));
+        if (f.at(6).toInt() != 0) QCOMPARE(i % 2, 0);
+    }
+}
+
+void TstStitchCore::shapeOnInProjects()
+{
+    QTemporaryDir dir;
+    Project p = sampleProject(dir.path());
+    p.settings.shaping.shapeOn = ShapingRows::OutsideRows;
+    const QString file = dir.filePath("s.stitchly");
+    QString error;
+    QVERIFY(saveProject(file, p, &error));
+    Project q;
+    QVERIFY2(loadProject(file, q, &error), qPrintable(error));
+    QVERIFY(q.settings.shaping.shapeOn == ShapingRows::OutsideRows);
+    p.settings.shaping.shapeOn = ShapingRows::EveryRow;
+    QVERIFY(!(p.settings == q.settings));
+    QVERIFY(saveProject(file, p, &error));
+    QVERIFY(loadProject(file, q, &error));
+    QVERIFY(q.settings.shaping.shapeOn == ShapingRows::EveryRow);
+
+    QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly));
+    QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QJsonObject settings = root["settings"].toObject();
+    auto write = [&](const QString &name) {
+        root["settings"] = settings;
+        QFile w(dir.filePath(name)); w.open(QIODevice::WriteOnly); w.write(QJsonDocument(root).toJson());
+        return dir.filePath(name);
+    };
+    settings.remove("shapeOn");                       // a file from before the setting: made with every row
+    QVERIFY(loadProject(write("old.stitchly"), q, &error));
+    QVERIFY(q.settings.shaping.shapeOn == ShapingRows::EveryRow);
+    settings["shapeOn"] = "sideways";
+    QVERIFY(!loadProject(write("bad.stitchly"), q, &error));
+    QVERIFY(error.contains("shapeOn"));
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

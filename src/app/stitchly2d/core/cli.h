@@ -18,6 +18,7 @@ struct CliOptions
     bool    hasRowHeight = false;
     double  rowHeightMm = 3.5;
     bool    seamAllowance = false;     //!< knit the outline with seam allowance (a project can ask for it, too)
+    QString shapeOn;                   //!< "outside" or "every"; empty = the project's (or the default: outside)
     bool    csv = false;               //!< print the row table instead of the instructions
     QString piece;                     //!< only this piece; empty = all
 };

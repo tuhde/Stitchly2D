@@ -13,8 +13,8 @@ namespace stitchcore
 /** Written instructions for one piece, one line per step. Row numbers are one-based. */
 QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &options = ShapingOptions());
 
-/** Row table as CSV: row;band;stitch type;first stitch;count;change left;change right. */
-QString rowTableCsv(const StitchGrid &grid);
+/** Row table as CSV: row;band;stitch type;first stitch;count;change left;change right (count and changes as planned). */
+QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options = ShapingOptions());
 
 }
 

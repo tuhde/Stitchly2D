@@ -320,6 +320,14 @@ void MainWindow::createDocks()
                               "instead of increased or decreased in one row."));
     form->addRow(tr("Cast on / bind off from"), m_bulkFrom);
 
+    m_shapeOn = new QComboBox;
+    m_shapeOn->setObjectName(QStringLiteral("shapeOnCombo"));
+    m_shapeOn->addItem(tr("Outside rows only"), int(ShapingRows::OutsideRows));
+    m_shapeOn->addItem(tr("Every row"), int(ShapingRows::EveryRow));
+    m_shapeOn->setToolTip(tr("Row 1 is an outside row. With \"Outside rows only\" a change that the outline needs on "
+                             "an inside row is worked on the outside row before it."));
+    form->addRow(tr("Shape on"), m_shapeOn);
+
     m_increase = new QComboBox;
     m_increase->setObjectName(QStringLiteral("increaseCombo"));
     m_increase->addItem(tr("M1"), int(IncreaseMethod::M1));
@@ -418,6 +426,7 @@ void MainWindow::createDocks()
             recordChange(tr("Change edge stitches"), 3);
         }
     });
+    connect(m_shapeOn, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
     connect(m_increase, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
     connect(m_decrease, &QComboBox::currentIndexChanged, this, &MainWindow::settingsChanged);
 
@@ -438,6 +447,7 @@ ShapingOptions MainWindow::currentShaping() const
     ShapingOptions o;
     o.edgeStitches = m_edgeStitches->value();
     o.bulkFrom = m_bulkFrom->value();
+    o.shapeOn = static_cast<ShapingRows>(m_shapeOn->currentData().toInt());
     o.increase = static_cast<IncreaseMethod>(m_increase->currentData().toInt());
     o.decrease = static_cast<DecreaseMethod>(m_decrease->currentData().toInt());
     return o;
@@ -1423,6 +1433,7 @@ void MainWindow::setSettings(const ProjectSettings &s, const QString &undoText)
     m_allowance->setChecked(s.includeSeamAllowance);
     m_edgeStitches->setValue(s.shaping.edgeStitches);
     m_bulkFrom->setValue(s.shaping.bulkFrom);
+    m_shapeOn->setCurrentIndex(m_shapeOn->findData(int(s.shaping.shapeOn)));
     m_increase->setCurrentIndex(m_increase->findData(int(s.shaping.increase)));
     m_decrease->setCurrentIndex(m_decrease->findData(int(s.shaping.decrease)));
     // A catalog stitch is only shown by name when its size is the one wanted; otherwise it is a custom stitch.
@@ -1536,7 +1547,7 @@ QStringList MainWindow::instructionsFor(const QString &piece) const
 QString MainWindow::rowTableFor(const QString &piece) const
 {
     const LoadedPiece *p = findPiece(piece);
-    return p ? rowTableCsv(gridFor(*p)) : QString();
+    return p ? rowTableCsv(gridFor(*p), currentShaping()) : QString();
 }
 
 QByteArray MainWindow::screenshotPng()
@@ -1561,7 +1572,7 @@ void MainWindow::exportRowTable()
 {
     if (!m_grid.isEmpty())
     {
-        saveText(tr("Export row table"), tr("CSV files (*.csv)"), QStringLiteral("rows.csv"), rowTableCsv(m_grid));
+        saveText(tr("Export row table"), tr("CSV files (*.csv)"), QStringLiteral("rows.csv"), rowTableCsv(m_grid, currentShaping()));
     }
 }
 

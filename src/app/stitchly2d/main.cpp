@@ -55,9 +55,12 @@ int main(int argc, char *argv[])
     QCommandLineOption shot(QStringLiteral("screenshot"),
                             QStringLiteral("Open the window, save a picture of it to this file and quit."),
                             QStringLiteral("file"));
+    QCommandLineOption shapeOnOption(QStringLiteral("shape-on"),
+                                     QStringLiteral("With --cli: shape the edges on \"outside\" rows only (default) or on \"every\" row."),
+                                     QStringLiteral("rows"));
     QCommandLineOption pieceOption(QStringLiteral("piece"), QStringLiteral("With --cli: only this piece."),
                                    QStringLiteral("name"));
-    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption});
+    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption, shapeOnOption});
     parser.process(app);
 
     if (!parser.isSet(cli))
@@ -103,5 +106,6 @@ int main(int argc, char *argv[])
     options.seamAllowance = parser.isSet(allowance);
     options.csv = parser.isSet(csv);
     options.piece = parser.value(pieceOption);
+    options.shapeOn = parser.value(shapeOnOption);
     return runCli(options, out, err);
 }

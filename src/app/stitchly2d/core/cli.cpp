@@ -59,6 +59,15 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     if (options.hasStitchWidth) settings.size.stitchWidthMm = options.stitchWidthMm;
     if (options.hasRowHeight) settings.size.rowHeightMm = options.rowHeightMm;
     if (options.seamAllowance) settings.includeSeamAllowance = true;
+    if (!options.shapeOn.isEmpty())
+    {
+        if (options.shapeOn != QLatin1String("outside") && options.shapeOn != QLatin1String("every"))
+        {
+            err << "--shape-on must be \"outside\" or \"every\".\n";
+            return 2;
+        }
+        settings.shaping.shapeOn = options.shapeOn == QLatin1String("every") ? ShapingRows::EveryRow : ShapingRows::OutsideRows;
+    }
     if (!settings.size.isValid())
     {
         err << "Stitch width and row height must be greater than 0.\n";
@@ -130,7 +139,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
             << (piece.grainline.isNull() ? "  [no grainline: drawn orientation used]" : "") << "\n";
         if (options.csv)
         {
-            out << rowTableCsv(grid);
+            out << rowTableCsv(grid, settings.shaping);
         }
         else
         {
