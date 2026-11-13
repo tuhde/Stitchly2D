@@ -40,7 +40,7 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 Crochet (chart symbols, rounds), embroidery (outline to stitch paths, PES/DST export), a CLI mode (reuse `commandoptions` from vmisc), and optional `.stitchly` project files that store stitch size settings next to the pattern.
 
 ### 6. AI integration (same as in our Seamly2D fork)
-Stitchly2D gets the same Claude integration we added to the fork (branch `feature/ai-integration`, docs in `AI_INTEGRATION.md` and `AI_INTEGRATION_PLAN.md` there). Claude can then load a pattern, set gauge and shaping options, inspect the stitch grid and export instructions in the running window, with undo.
+Stitchly2D gets the same Claude integration we added to the fork (branch `feature/ai-integration`, docs in `AI_INTEGRATION.md` and `AI_INTEGRATION_PLAN.md` there). Claude can then load a pattern, set the stitch size and shaping options, inspect the stitch grid and export instructions in the running window, with undo.
 - Vendor `src/libs/vmcp` (`mcpserver`, `mcprouter`, `mcptoolregistry`, `mcpinstances`) from the fork and add the "MCP Config and Log" panel and the optional Claude shell (QTermWidget, Linux only) to the main window, as in Seamly2D.
 - Same safety model: off by default, listens on 127.0.0.1 only, bearer token, Host/Origin checks, confirmation dialogs for file access, every action on the undo stack ("Claude: ...").
 - Same multi-window routing, using a different default port from Seamly2D (47800) so both apps can run side by side.
