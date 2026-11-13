@@ -310,6 +310,16 @@ void MainWindow::createDocks()
     m_edgeStitches->setValue(1);
     form->addRow(tr("Edge stitches"), m_edgeStitches);
 
+    m_bulkFrom = new QSpinBox;
+    m_bulkFrom->setObjectName(QStringLiteral("bulkFromSpin"));
+    m_bulkFrom->setRange(0, 50);
+    m_bulkFrom->setValue(4);
+    m_bulkFrom->setSpecialValueText(tr("never"));
+    m_bulkFrom->setSuffix(tr(" stitches"));
+    m_bulkFrom->setToolTip(tr("A change of at least this many stitches at one edge is cast on or bound off "
+                              "instead of increased or decreased in one row."));
+    form->addRow(tr("Cast on / bind off from"), m_bulkFrom);
+
     m_increase = new QComboBox;
     m_increase->setObjectName(QStringLiteral("increaseCombo"));
     m_increase->addItem(tr("M1"), int(IncreaseMethod::M1));
@@ -394,6 +404,13 @@ void MainWindow::createDocks()
     connect(m_stitchWidth, &QDoubleSpinBox::valueChanged, this, &MainWindow::sizeEdited);
     connect(m_rowHeight, &QDoubleSpinBox::valueChanged, this, &MainWindow::sizeEdited);
     connect(m_allowance, &QCheckBox::toggled, this, &MainWindow::settingsChanged);
+    connect(m_bulkFrom, &QSpinBox::valueChanged, this, [this]() {
+        if (!m_updating)
+        {
+            refresh();
+            recordChange(tr("Change cast on / bind off limit"), 4);
+        }
+    });
     connect(m_edgeStitches, &QSpinBox::valueChanged, this, [this]() {
         if (!m_updating)
         {
@@ -420,6 +437,7 @@ ShapingOptions MainWindow::currentShaping() const
 {
     ShapingOptions o;
     o.edgeStitches = m_edgeStitches->value();
+    o.bulkFrom = m_bulkFrom->value();
     o.increase = static_cast<IncreaseMethod>(m_increase->currentData().toInt());
     o.decrease = static_cast<DecreaseMethod>(m_decrease->currentData().toInt());
     return o;
@@ -1404,6 +1422,7 @@ void MainWindow::setSettings(const ProjectSettings &s, const QString &undoText)
     m_updating = true;
     m_allowance->setChecked(s.includeSeamAllowance);
     m_edgeStitches->setValue(s.shaping.edgeStitches);
+    m_bulkFrom->setValue(s.shaping.bulkFrom);
     m_increase->setCurrentIndex(m_increase->findData(int(s.shaping.increase)));
     m_decrease->setCurrentIndex(m_decrease->findData(int(s.shaping.decrease)));
     // A catalog stitch is only shown by name when its size is the one wanted; otherwise it is a custom stitch.

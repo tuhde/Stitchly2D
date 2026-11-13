@@ -184,6 +184,7 @@ private:
     QLabel             *m_gauge = nullptr;
     QCheckBox          *m_allowance = nullptr;
     QSpinBox           *m_edgeStitches = nullptr;
+    QSpinBox           *m_bulkFrom = nullptr;
     QComboBox          *m_increase = nullptr;
     QComboBox          *m_decrease = nullptr;
     QLabel             *m_stats = nullptr;

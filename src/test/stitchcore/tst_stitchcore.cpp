@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QRegularExpression>
 
 #include "stitchsize.h"
 #include "stitchgrid.h"
@@ -49,6 +50,11 @@ private slots:
     void projectUsedCatalog();
     void projectCatalogMerge();
     void equality();
+    void bulkChanges();
+    void regularShapingIsOneLine();
+    void irregularShapingStaysSeparate();
+    void patternRowsAreNotCompressed();
+    void bulkFromInProjects();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -752,6 +758,140 @@ void TstStitchCore::equality()
     PatternDef seed = c.find("Seed stitch"); seed.legend = {"K", "P"};
     d = c; d.set(seed);
     QVERIFY(!sameCatalog(c, d));
+}
+
+void TstStitchCore::bulkChanges()
+{
+    // 100 mm wide for 100 mm, then 200 mm wide: the right edge jumps by 20 stitches in one row
+    const QPolygonF ledge({{0, 0}, {100, 0}, {100, 100}, {200, 100}, {200, 200}, {0, 200}});
+    const StitchSize size{5.0, 5.0};
+    const StitchGrid grid = StitchGrid::build(ledge, size);
+    ShapingOptions o;                                       // bulkFrom = 4
+    QString text = writeInstructions(grid, o).join('\n');
+    QVERIFY2(text.contains("cast on 20 stitches at right edge"), qPrintable(text));
+    QVERIFY(!text.contains("increase 20"));
+    // casting on happens at the edge: no edge stitches are kept for it
+    for (const QString &line : writeInstructions(grid, o))
+        if (line.contains("cast on 20")) QVERIFY2(!line.contains("keep"), qPrintable(line));
+    o.bulkFrom = 0;                                         // never
+    text = writeInstructions(grid, o).join('\n');
+    QVERIFY2(text.contains("increase 20 (M1) at right edge"), qPrintable(text));
+    QVERIFY(!text.contains("cast on 20"));
+    o.bulkFrom = 21;                                        // just above the change
+    QVERIFY(writeInstructions(grid, o).join('\n').contains("increase 20"));
+    o.bulkFrom = 20;                                        // exactly at the change
+    QVERIFY(writeInstructions(grid, o).join('\n').contains("cast on 20"));
+
+    // the same going in: a decrease of 20 is a bind off
+    const QPolygonF narrowing({{0, 0}, {200, 0}, {200, 100}, {100, 100}, {100, 200}, {0, 200}});
+    o.bulkFrom = 4;
+    text = writeInstructions(StitchGrid::build(narrowing, size), o).join('\n');
+    QVERIFY2(text.contains("bind off 20 stitches at right edge"), qPrintable(text));
+    // a change at the left edge is named the same way
+    const QPolygonF left({{100, 0}, {200, 0}, {200, 100}, {0, 100}, {0, 200}, {200, 200}});
+    QVERIFY(writeInstructions(StitchGrid::build(left, size), o).join('\n').contains("at left edge"));
+    // small changes are still increases
+    const QPolygonF small({{0, 0}, {100, 0}, {100, 100}, {115, 100}, {115, 200}, {0, 200}});     // 3 stitches
+    QVERIFY(writeInstructions(StitchGrid::build(small, size), o).join('\n').contains("increase 3 (M1)"));
+}
+
+void TstStitchCore::regularShapingIsOneLine()
+{
+    ShapingOptions o;
+    // one stitch every 4 rows: 4 mm rows, 5 mm stitches, the right edge moves 5 mm per 16 mm
+    const QPolygonF slope({{0, 0}, {200, 0}, {150, 160}, {0, 160}});
+    StitchGrid grid = StitchGrid::build(slope, StitchSize{5.0, 4.0});
+    QStringList lines = writeInstructions(grid, o);
+    QString text = lines.join('\n');
+    QVERIFY2(text.contains("every 4th row"), qPrintable(text));
+    QVERIFY(text.contains("times) starting with row"));
+    QVERIFY(text.contains("decrease 1 (k2tog) at right edge"));
+    QVERIFY(text.contains("work the other rows even"));
+    QVERIFY2(lines.size() < 8, qPrintable(text));            // not one line per shaping row
+    // the stitch counts in the line are right: from the count before the first row to the count after the last
+    QRegularExpression re("\\((\\d+) -> (\\d+) stitches\\)");
+    const QRegularExpressionMatch m = re.match(text);
+    QVERIFY(m.hasMatch());
+    QCOMPARE(m.captured(2).toInt() - m.captured(1).toInt(), planShaping(grid).size() * -1);
+    QVERIFY(m.captured(2).toInt() < m.captured(1).toInt());
+
+    // every row, every other row, every third row
+    grid = StitchGrid::build(QPolygonF({{0, 0}, {200, 0}, {150, 50}, {0, 50}}), StitchSize{5.0, 5.0});
+    text = writeInstructions(grid, o).join('\n');
+    QVERIFY2(text.contains("Rows 2-10: every row (9 times)"), qPrintable(text));   // row 1 is the cast-on row
+    QVERIFY(text.contains("(40 -> 31 stitches)"));
+    QVERIFY(!text.contains("work the other rows even"));
+    grid = StitchGrid::build(QPolygonF({{0, 0}, {200, 0}, {150, 80}, {0, 80}}), StitchSize{5.0, 4.0});
+    QVERIFY(writeInstructions(grid, o).join('\n').contains("every other row") ||
+            writeInstructions(grid, o).join('\n').contains("every 4th row"));
+    grid = StitchGrid::build(QPolygonF({{0, 0}, {200, 0}, {150, 90}, {0, 90}}), StitchSize{5.0, 3.0});
+    QVERIFY2(writeInstructions(grid, o).join('\n').contains("every 3rd row"), qPrintable(writeInstructions(grid, o).join('\n')));
+    // the row range in the line really is the range of the shaping
+    const QVector<Shaping> shaping = planShaping(StitchGrid::build(slope, StitchSize{5.0, 4.0}));
+    text = writeInstructions(StitchGrid::build(slope, StitchSize{5.0, 4.0}), o).join('\n');
+    QVERIFY2(text.contains(QString("Rows %1-%2").arg(shaping.first().row + 1).arg(shaping.last().row + 1)), qPrintable(text));
+}
+
+void TstStitchCore::irregularShapingStaysSeparate()
+{
+    ShapingOptions o;
+    // two shaping rows only, or three at uneven distances, are written one by one
+    const QPolygonF two({{0, 0}, {100, 0}, {100, 40}, {95, 40}, {95, 80}, {90, 80}, {90, 160}, {0, 160}});
+    QString text = writeInstructions(StitchGrid::build(two, StitchSize{5.0, 4.0}), o).join('\n');
+    QVERIFY2(!text.contains("every"), qPrintable(text));
+    QCOMPARE(text.count("decrease 1"), 2);
+    // different amounts in a row are not a run
+    const QPolygonF mixed({{0, 0}, {200, 0}, {195, 20}, {185, 40}, {180, 60}, {170, 80}, {170, 120}, {0, 120}});
+    text = writeInstructions(StitchGrid::build(mixed, StitchSize{5.0, 4.0}), o).join('\n');
+    QVERIFY2(text.contains("decrease 2") || text.contains("decrease 1"), qPrintable(text));
+}
+
+void TstStitchCore::patternRowsAreNotCompressed()
+{
+    // a regular slope with a color pattern over it: every row is written, because the pattern differs per row
+    StitchCatalog catalog = StitchCatalog::withDefaults();
+    catalog.basics().set({"S", StitchSize{5.0, 4.0}});
+    BandSpec band;
+    band.stitchType = "S";
+    band.overlays.append(Overlay{"Stripes 2 rows"});
+    const QPolygonF slope({{0, 0}, {200, 0}, {150, 160}, {0, 160}});
+    const QString text = writeInstructions(StitchGrid::build(slope, {band}, catalog), ShapingOptions()).join('\n');
+    QVERIFY2(!text.contains("every"), qPrintable(text));
+    QVERIFY(text.contains("Row 1: "));
+    QVERIFY(text.contains(" x"));
+}
+
+void TstStitchCore::bulkFromInProjects()
+{
+    QTemporaryDir dir;
+    Project p = sampleProject(dir.path());
+    p.settings.shaping.bulkFrom = 7;
+    const QString file = dir.filePath("b.stitchly");
+    QString error;
+    QVERIFY(saveProject(file, p, &error));
+    Project q;
+    QVERIFY2(loadProject(file, q, &error), qPrintable(error));
+    QCOMPARE(q.settings.shaping.bulkFrom, 7);
+    QVERIFY(q.settings == p.settings);
+    Project other = p; other.settings.shaping.bulkFrom = 0;
+    QVERIFY(!(other.settings == p.settings));
+
+    // a file from before the setting existed gets the default
+    QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly));
+    QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QJsonObject settings = root["settings"].toObject();
+    settings.remove("bulkFrom");
+    root["settings"] = settings;
+    QFile w(dir.filePath("old.stitchly")); QVERIFY(w.open(QIODevice::WriteOnly));
+    w.write(QJsonDocument(root).toJson()); w.close();
+    QVERIFY(loadProject(dir.filePath("old.stitchly"), q, &error));
+    QCOMPARE(q.settings.shaping.bulkFrom, 4);
+    settings["bulkFrom"] = -1;
+    root["settings"] = settings;
+    QFile n(dir.filePath("neg.stitchly")); QVERIFY(n.open(QIODevice::WriteOnly));
+    n.write(QJsonDocument(root).toJson()); n.close();
+    QVERIFY(!loadProject(dir.filePath("neg.stitchly"), q, &error));
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

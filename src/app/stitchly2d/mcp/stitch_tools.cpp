@@ -115,6 +115,7 @@ QJsonObject settingsJson(const ProjectSettings &s)
                        {QStringLiteral("rowsPer10cm"), s.size.rowsPer10cm()},
                        {QStringLiteral("includeSeamAllowance"), s.includeSeamAllowance},
                        {QStringLiteral("edgeStitches"), s.shaping.edgeStitches},
+                       {QStringLiteral("bulkFrom"), s.shaping.bulkFrom},
                        {QStringLiteral("increase"), increaseText(s.shaping.increase)},
                        {QStringLiteral("decrease"), decreaseText(s.shaping.decrease)}};
 }
@@ -316,6 +317,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 {QStringLiteral("rowHeightMm"), num(QStringLiteral("Height of one row in mm."))},
                 {QStringLiteral("includeSeamAllowance"), flag(QStringLiteral("Knit the outline with seam allowance."))},
                 {QStringLiteral("edgeStitches"), integer(QStringLiteral("Plain stitches kept at each edge before shaping."))},
+                {QStringLiteral("bulkFrom"), integer(QStringLiteral("A change of at least this many stitches at one edge is cast on or bound off instead of increased or decreased in one row; 0 = never."))},
                 {QStringLiteral("increase"), oneOf({QStringLiteral("m1"), QStringLiteral("yarnover"), QStringLiteral("kfb")},
                                                    QStringLiteral("How increases are worked."))},
                 {QStringLiteral("decrease"), oneOf({QStringLiteral("k2tog_ssk"), QStringLiteral("k2tog")},
@@ -354,6 +356,12 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 const int n = a.value(QStringLiteral("edgeStitches")).toInt(-1);
                 if (n < 0 || n > 10) return McpToolResult::error(QStringLiteral("edgeStitches must be between 0 and 10."));
                 s.shaping.edgeStitches = n;
+            }
+            if (has(a, "bulkFrom"))
+            {
+                const int n = a.value(QStringLiteral("bulkFrom")).toInt(-1);
+                if (n < 0 || n > 50) return McpToolResult::error(QStringLiteral("bulkFrom must be between 0 and 50."));
+                s.shaping.bulkFrom = n;
             }
             if (has(a, "increase"))
             {

@@ -46,6 +46,11 @@ QString runsText(const QVector<Run> &runs)
     return parts.join(QStringLiteral(", "));
 }
 
+bool isBulk(int change, const ShapingOptions &o)
+{
+    return o.bulkFrom > 0 && qAbs(change) >= o.bulkFrom;
+}
+
 QString edge(const QString &side, int change, const ShapingOptions &o)
 {
     if (change == 0)
@@ -54,9 +59,35 @@ QString edge(const QString &side, int change, const ShapingOptions &o)
     }
     const bool left = side == QLatin1String("left");
     const int n = qAbs(change);
+    if (isBulk(change, o))
+    {
+        return QStringLiteral("%1 %2 stitches at %3 edge")
+            .arg(change > 0 ? QStringLiteral("cast on") : QStringLiteral("bind off")).arg(n).arg(side);
+    }
     const QString what = change > 0 ? QStringLiteral("increase %1 (%2)").arg(n).arg(incText(o.increase))
                                     : QStringLiteral("decrease %1 (%2)").arg(n).arg(decText(o.decrease, left));
     return QStringLiteral("%1 at %2 edge").arg(what, side);
+}
+
+/** What is done at the edges in a shaping row, e.g. "keep 1 edge stitch(es), increase 2 (M1) at left edge". */
+QString shapingBody(const Shaping &s, const ShapingOptions &o)
+{
+    QStringList parts;
+    const QString l = edge(QStringLiteral("left"), s.left, o);
+    const QString r = edge(QStringLiteral("right"), s.right, o);
+    if (!l.isEmpty()) parts << l;
+    if (!r.isEmpty()) parts << r;
+    const QString body = parts.join(QStringLiteral("; "));
+    // Edge stitches belong to increases and decreases; casting on and binding off happen at the very edge.
+    const bool plain = (s.left != 0 && !isBulk(s.left, o)) || (s.right != 0 && !isBulk(s.right, o));
+    return plain ? QStringLiteral("keep %1 edge stitch(es), %2").arg(o.edgeStitches).arg(body) : body;
+}
+
+QString ordinal(int n)
+{
+    const int r100 = n % 100;
+    const char *suffix = (r100 >= 11 && r100 <= 13) ? "th" : n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th";
+    return QStringLiteral("%1%2").arg(n).arg(QLatin1String(suffix));
 }
 }
 
@@ -70,9 +101,57 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     const bool multi = grid.bands().size() > 1;
     lines << QStringLiteral("Cast on %1 stitches%2.").arg(grid.castOn())
                  .arg(multi ? QStringLiteral(" and work in %1").arg(grid.bands().first().stitchType) : QString());
-    for (const Segment &s : planSegments(grid))
+    const QVector<Segment> segments = planSegments(grid);
+    for (int si = 0; si < segments.size(); ++si)
     {
+        const Segment &s = segments.at(si);
         const int first = s.firstRow + 1;
+
+        // The same edge change again and again at a regular distance is written once ("every 4th row, 6 times").
+        // Not where a pattern is laid over the rows: those rows are written one by one.
+        if (s.shaped && !s.shaping.bandChange)
+        {
+            QVector<int> run{si};
+            int gap = 0;
+            for (int j = si + 1; j < segments.size(); ++j)
+            {
+                const Segment &t = segments.at(j);
+                if (!t.shaped)
+                {
+                    continue;
+                }
+                const int g = t.shaping.row - segments.at(run.last()).shaping.row;
+                if (t.shaping.bandChange || t.shaping.left != s.shaping.left || t.shaping.right != s.shaping.right
+                    || (gap != 0 && g != gap))
+                {
+                    break;
+                }
+                gap = g;
+                run << j;
+            }
+            const int lastRow = segments.at(run.last()).shaping.row;
+            bool plainRows = true;
+            for (int r = s.shaping.row; r <= lastRow && plainRows; ++r)
+            {
+                plainRows = grid.overlayRuns(r).isEmpty();
+            }
+            if (run.size() >= 3 && plainRows)
+            {
+                const Shaping &z = segments.at(run.last()).shaping;
+                const QString cadence = gap == 1 ? QStringLiteral("every row")
+                                       : gap == 2 ? QStringLiteral("every other row")
+                                                  : QStringLiteral("every %1 row").arg(ordinal(gap));
+                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(s.shaping.row).band).stitchType)
+                                           : QString();
+                lines << QStringLiteral("Rows %1-%2%3: %4 (%5 times) starting with row %1: %6%7. (%8 -> %9 stitches)")
+                             .arg(s.shaping.row + 1).arg(lastRow + 1).arg(type).arg(cadence).arg(run.size())
+                             .arg(shapingBody(s.shaping, options))
+                             .arg(gap == 1 ? QString() : QStringLiteral("; work the other rows even"))
+                             .arg(s.shaping.stitchesAfter - s.shaping.left - s.shaping.right).arg(z.stitchesAfter);
+                si = run.last();
+                continue;
+            }
+        }
         if (!s.shaped)
         {
             // Rows with an overlay are written one by one; plain rows are grouped.
@@ -123,13 +202,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             }
             continue;
         }
-        QStringList parts;
-        const QString l = edge(QStringLiteral("left"), s.shaping.left, options);
-        const QString r = edge(QStringLiteral("right"), s.shaping.right, options);
-        if (!l.isEmpty()) parts << l;
-        if (!r.isEmpty()) parts << r;
-        lines << QStringLiteral("Row %1: keep %2 edge stitch(es), %3. (%4 stitches)")
-                     .arg(first).arg(options.edgeStitches).arg(parts.join(QStringLiteral("; ")))
+        lines << QStringLiteral("Row %1: %2. (%3 stitches)").arg(first).arg(shapingBody(s.shaping, options))
                      .arg(s.shaping.stitchesAfter);
         const QVector<Run> eruns = grid.overlayRuns(s.firstRow);
         if (!eruns.isEmpty())

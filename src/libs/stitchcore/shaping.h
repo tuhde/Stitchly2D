@@ -18,6 +18,8 @@ struct ShapingOptions
     IncreaseMethod increase = IncreaseMethod::M1;
     DecreaseMethod decrease = DecreaseMethod::K2tog_Ssk;
     int edgeStitches = 1;       //!< plain stitches kept at each edge before a shaping stitch
+    int bulkFrom = 4;           //!< a change of at least this many stitches at one edge is cast on / bound off
+                                //!< instead of increased / decreased in one row; 0 = never
 };
 
 /**

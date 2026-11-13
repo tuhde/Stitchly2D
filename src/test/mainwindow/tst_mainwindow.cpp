@@ -64,6 +64,7 @@ private slots:
     void unsavedChangesQuestion();
     void closingAsksFirst();
     void undoByClaude();
+    void bulkFromSetting();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -1012,6 +1013,39 @@ void TstMainWindow::undoByClaude()
     QVERIFY(!window->catalog().basics().contains("Moss"));
     QVERIFY(!window->isModified());
     QVERIFY(call("undo").isError);                                          // the start of the history
+}
+
+void TstMainWindow::bulkFromSetting()
+{
+    select("FrontPanel");
+    const QString standard = window->instructionsText();
+    QVERIFY2(standard.contains("cast on 12 stitches at right edge"), qPrintable(standard));
+    QVERIFY(standard.contains("every row"));                                  // regular shaping in one line
+    auto *bulk = find<QSpinBox>("bulkFromSpin");
+    QCOMPARE(bulk->value(), 4);
+    bulk->setValue(0);                                                        // never
+    QVERIFY(!window->instructionsText().contains("cast on 12"));
+    QVERIFY(window->instructionsText().contains("increase 12 (M1)"));
+    QCOMPARE(window->undoTexts().first(), QString("Change cast on / bind off limit"));
+    window->undo();
+    QCOMPARE(bulk->value(), 4);
+    QCOMPARE(window->instructionsText(), standard);
+
+    // through Claude
+    McpToolResult r = call("set_stitch_settings", {{"bulkFrom", 13}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    QCOMPARE(r.structured.toObject()["bulkFrom"].toInt(), 13);
+    QVERIFY(window->instructionsText().contains("increase 12 (M1)"));
+    QVERIFY(call("set_stitch_settings", {{"bulkFrom", -1}}).isError);
+    QVERIFY(call("set_stitch_settings", {{"bulkFrom", 51}}).isError);
+    QCOMPARE(window->settings().shaping.bulkFrom, 13);
+    // and it is part of a saved project
+    QTemporaryDir dir;
+    QString error;
+    QVERIFY(window->saveProject(dir.filePath("s.stitchly"), &error));
+    MainWindow other;
+    QVERIFY(other.openProject(dir.filePath("s.stitchly"), &error, MainWindow::CatalogConflict::KeepMine));
+    QCOMPARE(other.findChild<QSpinBox *>("bulkFromSpin")->value(), 13);
 }
 
 int main(int argc, char *argv[])

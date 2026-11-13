@@ -118,6 +118,7 @@ bool saveProject(const QString &path, const Project &p, QString *error)
                          {"rowHeightMm", p.settings.size.rowHeightMm},
                          {"includeSeamAllowance", p.settings.includeSeamAllowance},
                          {"edgeStitches", p.settings.shaping.edgeStitches},
+                         {"bulkFrom", p.settings.shaping.bulkFrom},
                          {"increase", increaseName(p.settings.shaping.increase)},
                          {"decrease", decreaseName(p.settings.shaping.decrease)}};
 
@@ -205,6 +206,11 @@ bool loadProject(const QString &path, Project &project, QString *error)
     {
         return fail(error, QStringLiteral("the number of edge stitches must not be negative"));
     }
+    out.settings.shaping.bulkFrom = s.value("bulkFrom").toInt(4);      // files from before this setting: the default
+    if (out.settings.shaping.bulkFrom < 0)
+    {
+        return fail(error, QStringLiteral("the number of stitches from which edges are cast on or bound off must not be negative"));
+    }
     if (!increaseFromName(s.value("increase").toString(), out.settings.shaping.increase)
         || !decreaseFromName(s.value("decrease").toString(), out.settings.shaping.decrease))
     {
@@ -291,7 +297,8 @@ bool operator==(const ProjectSettings &a, const ProjectSettings &b)
 {
     return a.stitchType == b.stitchType && sameSize(a.size, b.size)
            && a.includeSeamAllowance == b.includeSeamAllowance && a.shaping.edgeStitches == b.shaping.edgeStitches
-           && a.shaping.increase == b.shaping.increase && a.shaping.decrease == b.shaping.decrease;
+           && a.shaping.increase == b.shaping.increase && a.shaping.decrease == b.shaping.decrease
+           && a.shaping.bulkFrom == b.shaping.bulkFrom;
 }
 
 bool sameCatalog(const StitchCatalog &a, const StitchCatalog &b)
