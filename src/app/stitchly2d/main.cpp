@@ -40,7 +40,8 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Prepares Seamly2D patterns for knitting."));
     parser.addHelpOption();
-    parser.addPositionalArgument(QStringLiteral("pattern"), QStringLiteral("Seamly2D pattern (.sm2d), optional."));
+    parser.addPositionalArgument(QStringLiteral("pattern"),
+                                 QStringLiteral("Seamly2D pattern (.sm2d) or Stitchly2D project (.stitchly), optional."));
     QCommandLineOption stitchW({QStringLiteral("w"), QStringLiteral("stitch-width")},
                                QStringLiteral("Width of one stitch in mm (default 5)."), QStringLiteral("mm"),
                                QStringLiteral("5"));
@@ -65,7 +66,9 @@ int main(int argc, char *argv[])
         if (!parser.positionalArguments().isEmpty())
         {
             QString openError;
-            if (!window.openPattern(parser.positionalArguments().first(), &openError))
+            const QString first = parser.positionalArguments().first();
+            const bool project = first.endsWith(QStringLiteral(".stitchly"), Qt::CaseInsensitive);
+            if (!(project ? window.openProject(first, &openError) : window.openPattern(first, &openError)))
             {
                 QTextStream(stderr) << "Could not load the pattern: " << openError << "\n";
                 if (parser.isSet(shot)) return 1;

@@ -1,6 +1,7 @@
 // Drives the real main window: loads a sample pattern, edits bands and patterns, checks the instructions.
 #include <QtTest>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QListWidget>
@@ -35,6 +36,9 @@ private slots:
     void dialogResizeKeepsCells();
     void dialogImportExport();
     void setCatalogCleansUp();
+    void projectRoundTrip();
+    void projectCatalogConflict();
+    void projectErrorsKeepState();
 
 private:
     void select(const QString &piece);
@@ -330,6 +334,128 @@ void TstMainWindow::setCatalogCleansUp()
     c.basics().set({"Stockinette", StitchSize{4.0, 3.5}});
     window->setCatalog(c);
     QVERIFY2(window->instructionsText().contains("Cast on 73"), qPrintable(window->instructionsText()));
+}
+
+void TstMainWindow::projectRoundTrip()
+{
+    // settings
+    find<QComboBox>("stitchTypeCombo")->setCurrentText("Garter");
+    find<QCheckBox>("allowanceCheck")->setChecked(true);
+    find<QSpinBox>("edgeStitchesSpin")->setValue(3);
+    auto *increase = find<QComboBox>("increaseCombo");
+    increase->setCurrentIndex(increase->findData(int(IncreaseMethod::KFB)));
+    // bands and patterns on two pieces
+    select("Cuff");
+    find<QPushButton>("addBandButton")->click();
+    QTableWidget *bands = find<QTableWidget>("bandTable");
+    qobject_cast<QComboBox *>(bands->cellWidget(0, 0))->setCurrentText("2:2 rib");
+    qobject_cast<QDoubleSpinBox *>(bands->cellWidget(0, 1))->setValue(20);
+    bands->selectRow(1);
+    find<QPushButton>("addOverlayButton")->click();
+    auto *pattern = qobject_cast<QComboBox *>(find<QTableWidget>("overlayTable")->cellWidget(0, 0));
+    pattern->setCurrentIndex(pattern->findData("Stripes 2 rows"));
+    select("Pocket");
+    find<QPushButton>("addOverlayButton")->click();
+    select("Cuff");
+    const QString cuff = window->instructionsText();
+    select("Pocket");
+    const QString pocket = window->instructionsText();
+
+    QTemporaryDir dir;
+    const QString file = dir.filePath("work.stitchly");
+    QString error;
+    QVERIFY2(window->saveProject(file, &error), qPrintable(error));
+    QCOMPARE(window->projectFile(), file);
+
+    MainWindow other;
+    QVERIFY2(other.openProject(file, &error, MainWindow::CatalogConflict::UseProject), qPrintable(error));
+    QCOMPARE(other.projectFile(), file);
+    QCOMPARE(other.findChild<QListWidget *>("piecesList")->count(), 17);
+    QCOMPARE(other.findChild<QComboBox *>("stitchTypeCombo")->currentText(), QString("Garter"));
+    QVERIFY(other.findChild<QCheckBox *>("allowanceCheck")->isChecked());
+    QCOMPARE(other.findChild<QSpinBox *>("edgeStitchesSpin")->value(), 3);
+    QCOMPARE(other.findChild<QComboBox *>("increaseCombo")->currentData().toInt(), int(IncreaseMethod::KFB));
+    auto select2 = [&other](const QString &piece) {
+        QListWidget *list = other.findChild<QListWidget *>("piecesList");
+        list->setCurrentItem(list->findItems(piece, Qt::MatchExactly).first());
+    };
+    select2("Cuff");
+    QCOMPARE(other.instructionsText(), cuff);
+    QCOMPARE(other.findChild<QTableWidget *>("bandTable")->rowCount(), 2);
+    select2("Pocket");
+    QCOMPARE(other.instructionsText(), pocket);
+
+    // saving again over the same file works, and a new pattern starts a new project
+    QVERIFY2(other.saveProject(file, &error), qPrintable(error));
+    QVERIFY(other.openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"), &error));
+    QVERIFY(other.projectFile().isEmpty());
+    select2("Cuff");
+    QCOMPARE(other.findChild<QTableWidget *>("bandTable")->rowCount(), 1);
+    QVERIFY(!other.instructionsText().contains(" x"));
+}
+
+void TstMainWindow::projectCatalogConflict()
+{
+    select("Cuff");
+    find<QPushButton>("addBandButton")->click();
+    QTableWidget *bands = find<QTableWidget>("bandTable");
+    qobject_cast<QComboBox *>(bands->cellWidget(0, 0))->setCurrentText("2:2 rib");
+    qobject_cast<QDoubleSpinBox *>(bands->cellWidget(0, 1))->setValue(20);
+    QTemporaryDir dir;
+    const QString file = dir.filePath("c.stitchly");
+    QString error;
+    QVERIFY2(window->saveProject(file, &error), qPrintable(error));
+
+    // Another machine: same name, other size. And a catalog that lacks the stitch altogether.
+    StitchCatalog changed = StitchCatalog::withDefaults();
+    changed.basics().set({"2:2 rib", StitchSize{2.0, 2.0}});
+    StitchCatalog lacking = StitchCatalog::withDefaults();
+    lacking.basics().remove("2:2 rib");
+
+    MainWindow keep;
+    keep.setCatalog(changed);
+    QVERIFY2(keep.openProject(file, &error, MainWindow::CatalogConflict::KeepMine), qPrintable(error));
+    QCOMPARE(keep.catalog().basics().find("2:2 rib").size.stitchWidthMm, 2.0);       // mine stays
+
+    MainWindow use;
+    use.setCatalog(changed);
+    QVERIFY2(use.openProject(file, &error, MainWindow::CatalogConflict::UseProject), qPrintable(error));
+    QCOMPARE(use.catalog().basics().find("2:2 rib").size.stitchWidthMm, 3.5);        // the project's
+
+    MainWindow missing;
+    missing.setCatalog(lacking);
+    QVERIFY2(missing.openProject(file, &error, MainWindow::CatalogConflict::KeepMine), qPrintable(error));
+    QVERIFY(missing.catalog().basics().contains("2:2 rib"));                          // added, nothing to lose
+    QListWidget *list = missing.findChild<QListWidget *>("piecesList");
+    list->setCurrentItem(list->findItems("Cuff", Qt::MatchExactly).first());
+    QVERIFY(missing.instructionsText().contains("(2:2 rib)"));
+}
+
+void TstMainWindow::projectErrorsKeepState()
+{
+    select("Cuff");
+    find<QPushButton>("addOverlayButton")->click();
+    const QString before = window->instructionsText();
+
+    QTemporaryDir dir;
+    Project p;
+    p.patternFile = dir.filePath("gone.sm2d");
+    p.settings.size = StitchSize{5.0, 3.5};
+    QString error;
+    const QString file = dir.filePath("bad.stitchly");
+    QVERIFY(stitchcore::saveProject(file, p, &error));
+    QVERIFY(!window->openProject(file, &error, MainWindow::CatalogConflict::UseProject));
+    QVERIFY2(error.contains("gone.sm2d"), qPrintable(error));
+    QCOMPARE(window->instructionsText(), before);                    // the open pattern and its bands stay
+    QCOMPARE(find<QListWidget>("piecesList")->count(), 17);
+
+    QVERIFY(!window->openProject(dir.filePath("missing.stitchly"), &error));
+    QVERIFY(!error.isEmpty());
+
+    MainWindow empty;
+    QVERIFY(!empty.saveProject(dir.filePath("none.stitchly"), &error));      // nothing to save without a pattern
+    QVERIFY(error.contains("pattern"));
+    QVERIFY(!QFile::exists(dir.filePath("none.stitchly")));
 }
 
 int main(int argc, char *argv[])

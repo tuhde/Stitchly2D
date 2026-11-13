@@ -10,7 +10,7 @@ yarn. It shares Seamly2D's code and framework, so it looks and behaves like it.
 > **Status: early development.** The knitting engine, the pattern loader and a first main window work: open a
 > pattern, pick a basic stitch or enter the stitch width and row height, split a piece into bands with their own
 > stitch, lay special stitch and color patterns over them, and see the stitch grid and written instructions per
-> piece. The catalog of stitches and patterns can be edited and exchanged as `.stpat` files; bands and patterns are not saved with a project yet.
+> piece. The catalog of stitches and patterns can be edited and exchanged as `.stpat` files; bands, patterns and settings are saved in project files (`.stitchly`), which also carry the catalog entries they use.
 > See [docs/PLAN.md](docs/PLAN.md).
 
 ## How it will work
@@ -49,7 +49,7 @@ make -j$(nproc)
 ## Trying it
 
 ```sh
-build/src/app/stitchly2d/bin/stitchly2d pattern.sm2d          # main window
+build/src/app/stitchly2d/bin/stitchly2d pattern.sm2d          # main window (a .stitchly project works too)
 build/src/app/stitchly2d/bin/stitchly2d --cli --stitch-width 5 --row-height 3.5 pattern.sm2d   # text only
 ```
 

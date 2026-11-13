@@ -7,6 +7,7 @@
 
 #include "core/pattern_loader.h"
 #include "../../libs/stitchcore/catalog.h"
+#include "../../libs/stitchcore/project.h"
 #include "../../libs/stitchcore/shaping.h"
 #include "../../libs/stitchcore/stitchgrid.h"
 
@@ -34,7 +35,23 @@ class MainWindow : public QMainWindow
 public:
     MainWindow();
 
-    bool openPattern(const QString &fileName, QString *error = nullptr);
+    /** Open a Seamly2D pattern. A new pattern starts a new project: bands and patterns are cleared. */
+    bool openPattern(const QString &fileName, QString *error = nullptr,
+                     const QString &measurementsOverride = QString());
+
+    /** What to do when a project's catalog entries differ from the ones in the catalog. */
+    enum class CatalogConflict { Ask, UseProject, KeepMine };
+
+    /**
+     * Open a project (.stitchly): the pattern, the stitch settings, and the bands and patterns of every piece.
+     * Nothing changes if the pattern cannot be loaded.
+     */
+    bool openProject(const QString &fileName, QString *error = nullptr, CatalogConflict conflict = CatalogConflict::Ask);
+
+    /** Save the pattern's stitch settings, bands and patterns, with the catalog entries they use. */
+    bool saveProject(const QString &fileName, QString *error = nullptr);
+
+    QString projectFile() const { return m_projectFile; }
 
     /** Instructions of the selected piece, for tests and screenshots. */
     QString instructionsText() const;
@@ -54,6 +71,9 @@ protected:
 private slots:
     void fitAll();
     void editCatalog();
+    void openProjectDialog();
+    void saveProjectAction();
+    void saveProjectAs();
     void openFile();
     void exportInstructions();
     void exportRowTable();
@@ -108,6 +128,8 @@ private:
     QPushButton        *m_removeOverlay = nullptr;
     QPlainTextEdit     *m_instructions = nullptr;
     bool                m_updating = false;
+    QString             m_projectFile;
+    QString             m_measurementsOverride;
 };
 
 #endif

@@ -42,7 +42,8 @@ namespace
 {
 const qreal kScale = 4.0;           // scene units per millimetre
 const QString kCustom = QStringLiteral("Custom");
-const QString kDefaultStitch = QStringLiteral("Default stitch");   // the stitch settings dock, usable as a band's type
+// The stitch settings dock, usable as a band's type
+const QString kDefaultStitch = QString::fromLatin1(stitchcore::kDefaultStitchName);
 
 QString catalogPath()
 {
@@ -77,6 +78,9 @@ void MainWindow::createActions()
 {
     QMenu *file = menuBar()->addMenu(tr("&File"));
     QAction *open = file->addAction(tr("&Open pattern..."), this, &MainWindow::openFile, QKeySequence::Open);
+    file->addAction(tr("Open &project..."), this, &MainWindow::openProjectDialog);
+    QAction *save = file->addAction(tr("&Save project"), this, &MainWindow::saveProjectAction, QKeySequence::Save);
+    file->addAction(tr("Save project &as..."), this, &MainWindow::saveProjectAs, QKeySequence::SaveAs);
     file->addSeparator();
     file->addAction(tr("Export &instructions..."), this, &MainWindow::exportInstructions);
     file->addAction(tr("Export &row table (CSV)..."), this, &MainWindow::exportRowTable);
@@ -104,6 +108,7 @@ void MainWindow::createActions()
     QToolBar *bar = addToolBar(tr("Tools"));
     bar->setObjectName(QStringLiteral("toolbar"));
     bar->addAction(open);
+    bar->addAction(save);
     bar->addSeparator();
     bar->addAction(fit);
     bar->addAction(zin);
@@ -126,6 +131,7 @@ void MainWindow::createDocks()
     auto *form = new QFormLayout(panel);
 
     m_stitchType = new QComboBox;
+    m_stitchType->setObjectName(QStringLiteral("stitchTypeCombo"));
     for (const StitchType &t : m_catalog.basics().types())
     {
         m_stitchType->addItem(t.name);
@@ -134,12 +140,14 @@ void MainWindow::createDocks()
     form->addRow(tr("Basic stitch"), m_stitchType);
 
     m_stitchWidth = new QDoubleSpinBox;
+    m_stitchWidth->setObjectName(QStringLiteral("stitchWidthSpin"));
     m_stitchWidth->setRange(0.1, 100);
     m_stitchWidth->setDecimals(2);
     m_stitchWidth->setSuffix(tr(" mm"));
     form->addRow(tr("Stitch width"), m_stitchWidth);
 
     m_rowHeight = new QDoubleSpinBox;
+    m_rowHeight->setObjectName(QStringLiteral("rowHeightSpin"));
     m_rowHeight->setRange(0.1, 100);
     m_rowHeight->setDecimals(2);
     m_rowHeight->setSuffix(tr(" mm"));
@@ -150,20 +158,24 @@ void MainWindow::createDocks()
     form->addRow(tr("Gauge"), m_gauge);
 
     m_allowance = new QCheckBox(tr("Include seam allowance"));
+    m_allowance->setObjectName(QStringLiteral("allowanceCheck"));
     form->addRow(m_allowance);
 
     m_edgeStitches = new QSpinBox;
+    m_edgeStitches->setObjectName(QStringLiteral("edgeStitchesSpin"));
     m_edgeStitches->setRange(0, 10);
     m_edgeStitches->setValue(1);
     form->addRow(tr("Edge stitches"), m_edgeStitches);
 
     m_increase = new QComboBox;
+    m_increase->setObjectName(QStringLiteral("increaseCombo"));
     m_increase->addItem(tr("M1"), int(IncreaseMethod::M1));
     m_increase->addItem(tr("Yarn over"), int(IncreaseMethod::YarnOver));
     m_increase->addItem(tr("Knit front and back"), int(IncreaseMethod::KFB));
     form->addRow(tr("Increase"), m_increase);
 
     m_decrease = new QComboBox;
+    m_decrease->setObjectName(QStringLiteral("decreaseCombo"));
     m_decrease->addItem(tr("ssk / k2tog"), int(DecreaseMethod::K2tog_Ssk));
     m_decrease->addItem(tr("k2tog"), int(DecreaseMethod::K2tog));
     form->addRow(tr("Decrease"), m_decrease);
@@ -264,16 +276,19 @@ ShapingOptions MainWindow::currentShaping() const
     return o;
 }
 
-bool MainWindow::openPattern(const QString &fileName, QString *error)
+bool MainWindow::openPattern(const QString &fileName, QString *error, const QString &measurementsOverride)
 {
     LoadedPattern loaded;
     QString message;
-    if (!loadPattern(fileName, loaded, &message))
+    if (!loadPattern(fileName, loaded, &message, measurementsOverride))
     {
         if (error) *error = message;
         return false;
     }
     m_pattern = loaded;
+    m_pattern.fileName = QFileInfo(fileName).absoluteFilePath();
+    m_measurementsOverride = measurementsOverride;
+    m_projectFile.clear();
     m_bands.clear();
     m_updating = true;
     m_pieces->clear();
@@ -732,6 +747,157 @@ void MainWindow::showGrid(const QPolygonF &outline, const StitchGrid &grid)
 
     m_scene->setSceneRect(m_scene->itemsBoundingRect().adjusted(-40, -40, 40, 40));
     fitAll();
+}
+
+bool MainWindow::saveProject(const QString &fileName, QString *error)
+{
+    if (m_pattern.fileName.isEmpty())
+    {
+        if (error) *error = tr("Open a pattern first.");
+        return false;
+    }
+    Project p;
+    p.patternFile = m_pattern.fileName;
+    p.measurementsFile = m_measurementsOverride.isEmpty() ? QString() : QFileInfo(m_measurementsOverride).absoluteFilePath();
+    p.settings.stitchType = m_stitchType->currentText() == kCustom ? QString() : m_stitchType->currentText();
+    p.settings.size = currentSize();
+    p.settings.includeSeamAllowance = m_allowance->isChecked();
+    p.settings.shaping = currentShaping();
+    for (auto it = m_bands.cbegin(); it != m_bands.cend(); ++it)
+    {
+        p.bands.insert(it.key(), it.value());
+    }
+    p.catalog = usedCatalog(m_catalog, p.bands);
+    if (!stitchcore::saveProject(fileName, p, error))
+    {
+        return false;
+    }
+    m_projectFile = fileName;
+    setWindowTitle(QStringLiteral("%1 - Stitchly2D").arg(QFileInfo(fileName).fileName()));
+    statusBar()->showMessage(tr("Project saved to %1").arg(fileName), 5000);
+    return true;
+}
+
+bool MainWindow::openProject(const QString &fileName, QString *error, CatalogConflict conflict)
+{
+    Project p;
+    if (!stitchcore::loadProject(fileName, p, error))
+    {
+        return false;
+    }
+    // The pattern first: if it cannot be loaded, nothing else changes.
+    QString message;
+    if (!openPattern(p.patternFile, &message, p.measurementsFile))
+    {
+        if (error) *error = tr("The pattern of the project could not be loaded (%1): %2").arg(p.patternFile, message);
+        return false;
+    }
+
+    // The catalog entries the project was made with
+    const CatalogDiff diff = diffCatalog(m_catalog, p.catalog);
+    bool replace = conflict == CatalogConflict::UseProject;
+    if (!diff.differing.isEmpty() && conflict == CatalogConflict::Ask)
+    {
+        QMessageBox box(QMessageBox::Question, tr("Open project"),
+                        tr("These stitches or patterns in your catalog differ from the ones the project was made with:\n\n%1\n\n"
+                           "Use the project's versions? (This changes your catalog for this session; the catalog "
+                           "file is only rewritten when you edit the catalog.)").arg(diff.differing.join(QStringLiteral(", "))),
+                        QMessageBox::NoButton, this);
+        QPushButton *useProject = box.addButton(tr("Use the project's"), QMessageBox::AcceptRole);
+        box.addButton(tr("Keep mine"), QMessageBox::RejectRole);
+        box.exec();
+        replace = box.clickedButton() == useProject;
+    }
+    StitchCatalog merged = m_catalog;
+    mergeCatalog(merged, p.catalog, replace);
+
+    // Settings, then the catalog (which refreshes the stitch list), then the bands
+    m_updating = true;
+    m_allowance->setChecked(p.settings.includeSeamAllowance);
+    m_edgeStitches->setValue(p.settings.shaping.edgeStitches);
+    m_increase->setCurrentIndex(m_increase->findData(int(p.settings.shaping.increase)));
+    m_decrease->setCurrentIndex(m_decrease->findData(int(p.settings.shaping.decrease)));
+    m_updating = false;
+    setCatalog(merged);
+
+    m_updating = true;
+    const StitchType named = merged.basics().find(p.settings.stitchType);
+    const bool sameAsCatalog = !p.settings.stitchType.isEmpty() && !named.name.isEmpty()
+                               && qFuzzyCompare(named.size.stitchWidthMm, p.settings.size.stitchWidthMm)
+                               && qFuzzyCompare(named.size.rowHeightMm, p.settings.size.rowHeightMm);
+    m_stitchType->setCurrentIndex(sameAsCatalog ? m_stitchType->findText(p.settings.stitchType)
+                                                : m_stitchType->findText(kCustom));
+    m_stitchWidth->setValue(p.settings.size.stitchWidthMm);
+    m_rowHeight->setValue(p.settings.size.rowHeightMm);
+    m_updating = false;
+
+    m_bands.clear();
+    for (auto it = p.bands.cbegin(); it != p.bands.cend(); ++it)
+    {
+        m_bands.insert(it.key(), it.value());
+    }
+    m_projectFile = fileName;
+    setWindowTitle(QStringLiteral("%1 - Stitchly2D").arg(QFileInfo(fileName).fileName()));
+    populateBandTables();
+    refresh();
+    return true;
+}
+
+void MainWindow::openProjectDialog()
+{
+    const QString file = QFileDialog::getOpenFileName(this, tr("Open project"), QString(),
+                                                      tr("Stitchly2D projects (*.stitchly);;All files (*)"));
+    if (file.isEmpty())
+    {
+        return;
+    }
+    QString error;
+    if (!openProject(file, &error))
+    {
+        QMessageBox::warning(this, tr("Could not open the project"), error);
+    }
+}
+
+void MainWindow::saveProjectAction()
+{
+    if (m_projectFile.isEmpty())
+    {
+        saveProjectAs();
+        return;
+    }
+    QString error;
+    if (!saveProject(m_projectFile, &error))
+    {
+        QMessageBox::warning(this, tr("Could not save the project"), error);
+    }
+}
+
+void MainWindow::saveProjectAs()
+{
+    if (m_pattern.fileName.isEmpty())
+    {
+        QMessageBox::information(this, tr("Save project"), tr("Open a pattern first."));
+        return;
+    }
+    QString suggested = m_projectFile.isEmpty()
+                            ? QFileInfo(m_pattern.fileName).absolutePath() + QLatin1Char('/')
+                                  + QFileInfo(m_pattern.fileName).completeBaseName() + QStringLiteral(".stitchly")
+                            : m_projectFile;
+    QString file = QFileDialog::getSaveFileName(this, tr("Save project"), suggested,
+                                                tr("Stitchly2D projects (*.stitchly)"));
+    if (file.isEmpty())
+    {
+        return;
+    }
+    if (QFileInfo(file).suffix().isEmpty())
+    {
+        file += QStringLiteral(".stitchly");
+    }
+    QString error;
+    if (!saveProject(file, &error))
+    {
+        QMessageBox::warning(this, tr("Could not save the project"), error);
+    }
 }
 
 void MainWindow::editCatalog()

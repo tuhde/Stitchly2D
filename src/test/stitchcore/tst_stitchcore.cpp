@@ -6,6 +6,7 @@
 #include "catalog.h"
 #include "patternfile.h"
 #include "pieceoutline.h"
+#include "project.h"
 #include "shaping.h"
 #include "instructions.h"
 
@@ -41,6 +42,10 @@ private slots:
     void outlineRotated();
     void outlineNoGrainline();
     void rowPositions();
+    void projectRoundTrip();
+    void projectErrors();
+    void projectUsedCatalog();
+    void projectCatalogMerge();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -496,6 +501,175 @@ void TstStitchCore::rowPositions()
     const Row &first = grid.rows().first();
     const qreal left = b.xOriginMm + first.firstStitch * b.size.stitchWidthMm;
     QVERIFY(qAbs(left - 50.0) <= b.size.stitchWidthMm / 2 + 1e-6);   // within half a stitch of the real edge
+}
+
+static Project sampleProject(const QString &dir)
+{
+    Project p;
+    p.patternFile = dir + "/patterns/shirt.sm2d";
+    p.measurementsFile = dir + "/measurements/me.smis";
+    p.settings.stitchType = "Garter";
+    p.settings.size = StitchSize{4.5, 3.0};
+    p.settings.includeSeamAllowance = true;
+    p.settings.shaping.edgeStitches = 2;
+    p.settings.shaping.increase = IncreaseMethod::KFB;
+    p.settings.shaping.decrease = DecreaseMethod::K2tog;
+    BandSpec rib;
+    rib.stitchType = "2:2 rib";
+    rib.heightMm = 60;
+    BandSpec body;
+    body.stitchType = kDefaultStitchName;
+    Overlay o{"Seed stitch"};
+    o.firstRow = 2; o.rowCount = 5; o.firstStitch = 1; o.stitchCount = 8; o.offsetX = -1; o.offsetY = 3;
+    body.overlays.append(o);
+    body.overlays.append(Overlay{"Stripes 2 rows"});
+    p.bands.insert("Cuff", {rib, body});
+    p.catalog = usedCatalog(StitchCatalog::withDefaults(), p.bands);
+    return p;
+}
+
+void TstStitchCore::projectRoundTrip()
+{
+    QTemporaryDir dir;
+    QVERIFY(QDir(dir.path()).mkpath("proj"));
+    const QString file = dir.filePath("proj/work.stitchly");
+    const Project p = sampleProject(dir.path());
+    QString error;
+    QVERIFY2(saveProject(file, p, &error), qPrintable(error));
+
+    // file names are stored relative to the project file
+    QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly));
+    const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    QCOMPARE(root["pattern"].toString(), QString("../patterns/shirt.sm2d"));
+    QCOMPARE(root["measurements"].toString(), QString("../measurements/me.smis"));
+
+    Project q;
+    QVERIFY2(loadProject(file, q, &error), qPrintable(error));
+    QCOMPARE(q.patternFile, p.patternFile);
+    QCOMPARE(q.measurementsFile, p.measurementsFile);
+    QCOMPARE(q.settings.stitchType, QString("Garter"));
+    QCOMPARE(q.settings.size.stitchWidthMm, 4.5);
+    QCOMPARE(q.settings.size.rowHeightMm, 3.0);
+    QVERIFY(q.settings.includeSeamAllowance);
+    QCOMPARE(q.settings.shaping.edgeStitches, 2);
+    QVERIFY(q.settings.shaping.increase == IncreaseMethod::KFB);
+    QVERIFY(q.settings.shaping.decrease == DecreaseMethod::K2tog);
+    QCOMPARE(q.bands.value("Cuff").size(), 2);
+    const BandSpec &body = q.bands.value("Cuff").at(1);
+    QCOMPARE(body.stitchType, QString(kDefaultStitchName));
+    QCOMPARE(body.overlays.size(), 2);
+    QCOMPARE(body.overlays.first().pattern, QString("Seed stitch"));
+    QCOMPARE(body.overlays.first().offsetX, -1);
+    QCOMPARE(body.overlays.first().stitchCount, 8);
+    QCOMPARE(q.bands.value("Cuff").at(0).heightMm, 60.0);
+    QVERIFY(q.catalog.basics().contains("2:2 rib"));
+    QVERIFY(q.catalog.contains("Stripes 2 rows"));
+
+    // without measurements override
+    Project noMeasure = p;
+    noMeasure.measurementsFile.clear();
+    QVERIFY(saveProject(file, noMeasure, &error));
+    QVERIFY(loadProject(file, q, &error));
+    QVERIFY(q.measurementsFile.isEmpty());
+
+    // moving the project and the pattern together keeps working (relative names)
+    QVERIFY(QDir(dir.path()).mkpath("moved/proj"));
+    QVERIFY(QFile::copy(file, dir.filePath("moved/proj/work.stitchly")));
+    QVERIFY(loadProject(dir.filePath("moved/proj/work.stitchly"), q, &error));
+    QCOMPARE(q.patternFile, QDir::cleanPath(dir.filePath("moved/patterns/shirt.sm2d")));
+}
+
+void TstStitchCore::projectErrors()
+{
+    QTemporaryDir dir;
+    auto write = [&dir](const QString &name, const QByteArray &data) {
+        QFile f(dir.filePath(name)); f.open(QIODevice::WriteOnly); f.write(data); return dir.filePath(name);
+    };
+    Project out; QString err;
+    QVERIFY(!loadProject(dir.filePath("missing.stitchly"), out, &err));
+    QVERIFY(!loadProject(write("a", "no json"), out, &err));
+    QVERIFY(!loadProject(write("b", R"({"format":"other","version":1})"), out, &err));
+    QVERIFY(!loadProject(write("c", R"({"format":"stitchly-project","version":99})"), out, &err));
+    QVERIFY(err.contains("newer"));
+
+    const Project good = sampleProject(dir.path());
+    const QString file = dir.filePath("good.stitchly");
+    QVERIFY(saveProject(file, good, &err));
+    QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly));
+    const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    auto tampered = [&](const std::function<void(QJsonObject &)> &change) {
+        QJsonObject r = root; change(r);
+        QFile o(dir.filePath("t.stitchly")); o.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        o.write(QJsonDocument(r).toJson());
+        return dir.filePath("t.stitchly");
+    };
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) { r["pattern"] = ""; }), out, &err));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) {
+        QJsonObject s = r["settings"].toObject(); s["stitchWidthMm"] = 0; r["settings"] = s; }), out, &err));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) {
+        QJsonObject s = r["settings"].toObject(); s["increase"] = "bogus"; r["settings"] = s; }), out, &err));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) {
+        QJsonObject s = r["settings"].toObject(); s["edgeStitches"] = -1; r["settings"] = s; }), out, &err));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) {
+        QJsonObject pieces = r["pieces"].toObject();
+        pieces["Cuff"] = QJsonObject{{"bands", QJsonArray()}}; r["pieces"] = pieces; }), out, &err));
+    QVERIFY(err.contains("Cuff"));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) {
+        QJsonObject pieces = r["pieces"].toObject();
+        QJsonObject cuff = pieces["Cuff"].toObject();
+        QJsonArray bands = cuff["bands"].toArray();
+        QJsonObject b0 = bands[0].toObject(); b0["stitchType"] = ""; bands[0] = b0;
+        cuff["bands"] = bands; pieces["Cuff"] = cuff; r["pieces"] = pieces; }), out, &err));
+    QVERIFY(!loadProject(tampered([](QJsonObject &r) { r["catalog"] = QJsonObject{{"version", 7}}; }), out, &err));
+    QCOMPARE(out.bands.size(), 0);          // a failed load leaves the project alone
+    QVERIFY(loadProject(file, out, &err));  // and the untouched file still loads
+}
+
+void TstStitchCore::projectUsedCatalog()
+{
+    const StitchCatalog full = StitchCatalog::withDefaults();
+    BandSpec a; a.stitchType = "2:2 rib"; a.heightMm = 10;
+    BandSpec b; b.stitchType = kDefaultStitchName; b.overlays.append(Overlay{"Seed stitch"});
+    BandSpec c; c.stitchType = "gone"; c.overlays.append(Overlay{"also gone"});
+    const StitchCatalog used = usedCatalog(full, {{"X", {a, b}}, {"Y", {c}}});
+    QCOMPARE(used.basics().types().size(), 1);
+    QVERIFY(used.basics().contains("2:2 rib"));
+    QCOMPARE(used.patterns().size(), 1);
+    QVERIFY(used.contains("Seed stitch"));
+    QVERIFY(usedCatalog(full, {}).patterns().isEmpty());
+}
+
+void TstStitchCore::projectCatalogMerge()
+{
+    const StitchCatalog base = StitchCatalog::withDefaults();
+    StitchCatalog incoming;
+    incoming.basics().set({"Stockinette", StitchSize{4.0, 3.5}});     // differs
+    incoming.basics().set({"1:1 rib", base.basics().find("1:1 rib").size});   // same
+    incoming.basics().set({"Moss", StitchSize{4.5, 3.0}});            // new
+    PatternDef seed = base.find("Seed stitch");
+    seed.legend = {"K", "P"};                                          // differs
+    QVERIFY(incoming.set(seed));
+    QVERIFY(incoming.set(base.find("Checks 2x2")));                    // same
+    PatternDef fresh = base.find("Checks 2x2"); fresh.name = "Fresh";
+    QVERIFY(incoming.set(fresh));                                      // new
+
+    const CatalogDiff d = diffCatalog(base, incoming);
+    QCOMPARE(d.added, QStringList({"Moss", "Fresh"}));
+    QCOMPARE(d.differing, QStringList({"Stockinette", "Seed stitch"}));
+
+    StitchCatalog keep = base;
+    mergeCatalog(keep, incoming, false);
+    QVERIFY(keep.basics().contains("Moss"));
+    QVERIFY(keep.contains("Fresh"));
+    QCOMPARE(keep.basics().find("Stockinette").size.stitchWidthMm, 5.0);      // mine stays
+    QCOMPARE(keep.find("Seed stitch").legend.first(), QString("k"));
+
+    StitchCatalog use = base;
+    mergeCatalog(use, incoming, true);
+    QCOMPARE(use.basics().find("Stockinette").size.stitchWidthMm, 4.0);        // the project's wins
+    QCOMPARE(use.find("Seed stitch").legend.first(), QString("K"));
+    QVERIFY(diffCatalog(use, incoming).differing.isEmpty());
+    QVERIFY(diffCatalog(use, incoming).added.isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)
