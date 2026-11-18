@@ -6,7 +6,9 @@
 #include <QCloseEvent>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDir>
+#include <QUrl>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -208,36 +210,126 @@ void MainWindow::initializeMcp()
     }
 }
 
+namespace
+{
+QIcon themeIcon(const char *name, int size = 24)
+{
+    return QIcon(QStringLiteral(":/icons/win.icon.theme/%1x%1/actions/%2.png").arg(size).arg(QLatin1String(name)));
+}
+}
+
 void MainWindow::createActions()
 {
-    QMenu *file = menuBar()->addMenu(tr("&File"));
-    QAction *open = file->addAction(tr("&Open pattern..."), this, &MainWindow::openFile, QKeySequence::Open);
-    file->addAction(tr("Open &project..."), this, &MainWindow::openProjectDialog);
-    QAction *save = file->addAction(tr("&Save project"), this, &MainWindow::saveProjectAction, QKeySequence::Save);
-    file->addAction(tr("Save project &as..."), this, &MainWindow::saveProjectAs, QKeySequence::SaveAs);
-    file->addSeparator();
-    file->addAction(tr("Export &instructions..."), this, &MainWindow::exportInstructions);
-    file->addAction(tr("Export &row table (CSV)..."), this, &MainWindow::exportRowTable);
-    file->addAction(tr("Export &chart image..."), this, &MainWindow::exportImage);
-    file->addSeparator();
-    file->addAction(tr("&Quit"), this, &QWidget::close, QKeySequence::Quit);
+    auto *settings = qApp->Seamly2DSettings();
 
+    // ---- File
+    QMenu *file = menuBar()->addMenu(tr("&File"));
+    QAction *open = file->addAction(themeIcon("document-open"), tr("&Open pattern..."), this, &MainWindow::openFile,
+                                    QKeySequence::Open);
+    QAction *openProj = file->addAction(themeIcon("document-new"), tr("Open &project..."), this,
+                                        &MainWindow::openProjectDialog, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
+    m_recentMenu = file->addMenu(tr("Open &recent"));
+    updateRecentMenu();
+    QAction *save = file->addAction(themeIcon("document-save"), tr("&Save project"), this,
+                                    &MainWindow::saveProjectAction, QKeySequence::Save);
+    file->addAction(themeIcon("document-save-as"), tr("Save project &as..."), this, &MainWindow::saveProjectAs,
+                    QKeySequence::SaveAs);
+    file->addSeparator();
+    QAction *exInstr = file->addAction(themeIcon("document-print"), tr("Export &instructions..."), this,
+                                       &MainWindow::exportInstructions);
+    QAction *exTable = file->addAction(themeIcon("document-print-preview"), tr("Export &row table (CSV)..."), this,
+                                       &MainWindow::exportRowTable);
+    QAction *exImage = file->addAction(themeIcon("document-save-as"), tr("Export &chart image..."), this,
+                                       &MainWindow::exportImage);
+    file->addSeparator();
+    file->addAction(themeIcon("preferences-other"), tr("&Preferences..."), this, &MainWindow::preferences)
+        ->setMenuRole(QAction::NoRole);
+    file->addSeparator();
+    file->addAction(themeIcon("application-exit"), tr("&Quit"), this, &QWidget::close, QKeySequence::Quit);
+
+    // ---- Edit
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     QAction *undoAction = m_undo->createUndoAction(this, tr("&Undo"));
     undoAction->setShortcut(QKeySequence::Undo);
+    undoAction->setIcon(themeIcon("edit-undo"));
     QAction *redoAction = m_undo->createRedoAction(this, tr("&Redo"));
     redoAction->setShortcut(QKeySequence::Redo);
+    redoAction->setIcon(themeIcon("edit-redo"));
     undoAction->setIconText(tr("Undo"));       // the menu names the step ("Undo Add band"); the toolbar button must stay short
     redoAction->setIconText(tr("Redo"));
     editMenu->addAction(undoAction);
     editMenu->addAction(redoAction);
 
+    // ---- Catalog
+    QMenu *catalogMenu = menuBar()->addMenu(tr("&Catalog"));
+    QAction *editCat = catalogMenu->addAction(themeIcon("list-add"), tr("&Edit catalog (stitches and patterns)..."),
+                                              this, &MainWindow::editCatalog);
+
+    // ---- View: zoom actions like Seamly2D's zoom toolbar
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     m_viewMenu = viewMenu;
-    QAction *fit = viewMenu->addAction(tr("Zoom to &fit"), this, &MainWindow::fitAll,
+    m_zoomIn = viewMenu->addAction(themeIcon("zoom_in"), tr("Zoom &in"), m_view, &VMainGraphicsView::zoomIn,
+                                   QKeySequence::ZoomIn);
+    m_zoomOut = viewMenu->addAction(themeIcon("zoom_out"), tr("Zoom &out"), m_view, &VMainGraphicsView::zoomOut,
+                                    QKeySequence::ZoomOut);
+    QAction *zoom100 = viewMenu->addAction(themeIcon("zoom_100_percent"), tr("Zoom &100%"), m_view,
+                                           &VMainGraphicsView::zoom100Percent, QKeySequence(Qt::CTRL | Qt::Key_1));
+    QAction *fit = viewMenu->addAction(themeIcon("zoom_to_fit"), tr("Zoom to &fit"), this, &MainWindow::fitAll,
                                        QKeySequence(Qt::CTRL | Qt::Key_0));
-    QAction *zin = viewMenu->addAction(tr("Zoom &in"), m_view, &VMainGraphicsView::zoomIn, QKeySequence::ZoomIn);
-    QAction *zout = viewMenu->addAction(tr("Zoom &out"), m_view, &VMainGraphicsView::zoomOut, QKeySequence::ZoomOut);
+    QAction *panAction = viewMenu->addAction(themeIcon("zoom_pan"), tr("&Pan zoom"));
+    panAction->setCheckable(true);
+    panAction->setShortcut(QKeySequence(Qt::Key_Z));
+    QAction *areaAction = viewMenu->addAction(themeIcon("zoom_to_area"), tr("Zoom to &area"));
+    areaAction->setCheckable(true);
+    areaAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_A));
+    connect(panAction, &QAction::toggled, this, [this, areaAction](bool on) {
+        m_view->zoomPanEnabled(on);
+        if (on) areaAction->setChecked(false);
+    });
+    connect(areaAction, &QAction::toggled, this, [this, panAction](bool on) {
+        m_view->zoomToAreaEnabled(on);
+        if (on) panAction->setChecked(false);
+    });
+    viewMenu->addSeparator();
+
+    // ---- Toolbars (icon ribbons), each in the View menu and remembered between runs
+    auto makeBar = [this](const QString &title, const char *name, int iconSize) {
+        QToolBar *bar = addToolBar(title);
+        bar->setObjectName(QLatin1String(name));
+        bar->setIconSize(QSize(iconSize, iconSize));
+        bar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        return bar;
+    };
+    QToolBar *fileBar = makeBar(tr("File"), "fileToolBar", 24);
+    fileBar->addActions({open, openProj, save});
+    QToolBar *editBar = makeBar(tr("Edit"), "editToolBar", 24);
+    editBar->addActions({undoAction, redoAction});
+    QToolBar *exportBar = makeBar(tr("Export"), "exportToolBar", 24);
+    exportBar->addActions({exInstr, exTable, exImage});
+    QToolBar *catalogBar = makeBar(tr("Catalog"), "catalogToolBar", 24);
+    catalogBar->addAction(editCat);
+    QToolBar *zoomBar = makeBar(tr("Zoom"), "zoomToolBar", 24);
+    zoomBar->addActions({m_zoomIn, m_zoomOut, zoom100, fit, panAction, areaAction});
+    m_zoomScale = new QDoubleSpinBox;
+    m_zoomScale->setRange(5, 2000);
+    m_zoomScale->setDecimals(0);
+    m_zoomScale->setSuffix(QStringLiteral(" %"));
+    m_zoomScale->setValue(100);
+    m_zoomScale->setToolTip(tr("Zoom"));
+    m_zoomScale->setKeyboardTracking(false);
+    connect(m_zoomScale, &QDoubleSpinBox::valueChanged, this, [this](double v) {
+        if (!m_updatingZoom) m_view->zoomByScale(v / 100.0);
+    });
+    connect(m_view, &VMainGraphicsView::signalZoomScaleChanged, this, [this](qreal scale) {
+        m_updatingZoom = true;
+        m_zoomScale->setValue(scale * 100.0);
+        m_updatingZoom = false;
+    });
+    zoomBar->insertWidget(m_zoomIn, m_zoomScale);
+    for (QToolBar *bar : {fileBar, editBar, exportBar, catalogBar, zoomBar})
+    {
+        viewMenu->addAction(bar->toggleViewAction());
+    }
     viewMenu->addSeparator();
     for (QDockWidget *dock : findChildren<QDockWidget *>())
     {
@@ -250,7 +342,7 @@ void MainWindow::createActions()
     auto *languageGroup = new QActionGroup(this);
     QComboBox languages;
     InitLanguages(&languages);
-    const QString current = qApp->Seamly2DSettings()->getLocale();
+    const QString current = settings->getLocale();
     for (int i = 0; i < languages.count(); ++i)
     {
         const QString locale = languages.itemData(i).toString();
@@ -261,22 +353,80 @@ void MainWindow::createActions()
         connect(item, &QAction::triggered, this, [this, locale]() { setLanguage(locale); });
     }
 
-    QMenu *catalogMenu = menuBar()->addMenu(tr("&Catalog"));
-    catalogMenu->addAction(tr("&Edit catalog (stitches and patterns)..."), this, &MainWindow::editCatalog);
-
+    // ---- Help
     QMenu *help = menuBar()->addMenu(tr("&Help"));
-    help->addAction(tr("&About Stitchly2D"), this, &MainWindow::about);
+    help->addAction(themeIcon("help-contents"), tr("&Documentation"), this, []() {
+        QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/tuhde/Stitchly2D")));
+    });
+    help->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt)->setMenuRole(QAction::AboutQtRole);
+    help->addAction(themeIcon("help-about"), tr("&About Stitchly2D"), this, &MainWindow::about)
+        ->setMenuRole(QAction::AboutRole);
 
-    QToolBar *bar = addToolBar(tr("Tools"));
-    bar->setObjectName(QStringLiteral("toolbar"));
-    bar->addAction(open);
-    bar->addAction(save);
-    bar->addAction(undoAction);
-    bar->addAction(redoAction);
-    bar->addSeparator();
-    bar->addAction(fit);
-    bar->addAction(zin);
-    bar->addAction(zout);
+    // Window layout from the last run (toolbars, docks); the default layout otherwise.
+    restoreGeometry(settings->GetGeometry());
+    restoreState(settings->GetWindowState());
+}
+
+void MainWindow::updateRecentMenu()
+{
+    m_recentMenu->clear();
+    const QStringList files = qApp->Seamly2DSettings()->GetRecentFileList();
+    for (const QString &f : files)
+    {
+        const QString shown = QFileInfo(f).fileName();
+        QAction *a = m_recentMenu->addAction(shown, this, [this, f]() { openRecent(f); });
+        a->setToolTip(f);
+        a->setStatusTip(f);
+    }
+    m_recentMenu->setEnabled(!files.isEmpty());
+    if (!files.isEmpty())
+    {
+        m_recentMenu->addSeparator();
+        m_recentMenu->addAction(tr("&Clear list"), this, [this]() {
+            qApp->Seamly2DSettings()->SetRecentFileList(QStringList());
+            updateRecentMenu();
+        });
+    }
+}
+
+void MainWindow::addRecentFile(const QString &fileName)
+{
+    const QString path = QFileInfo(fileName).absoluteFilePath();
+    QStringList files = qApp->Seamly2DSettings()->GetRecentFileList();
+    files.removeAll(path);
+    files.prepend(path);
+    while (files.size() > 10)
+    {
+        files.removeLast();
+    }
+    qApp->Seamly2DSettings()->SetRecentFileList(files);
+    updateRecentMenu();
+}
+
+void MainWindow::openRecent(const QString &fileName)
+{
+    if (!maybeSave())
+    {
+        return;
+    }
+    QString error;
+    const bool project = fileName.endsWith(QStringLiteral(".stitchly"), Qt::CaseInsensitive);
+    if (!(project ? openProject(fileName, &error) : openPattern(fileName, &error)))
+    {
+        QMessageBox::warning(this, project ? tr("Could not open the project") : tr("Could not load the pattern"),
+                             error);
+        return;
+    }
+    addRecentFile(fileName);
+}
+
+void MainWindow::preferences()
+{
+    // Language is the only application setting so far; the rest of the settings lives next to what it changes.
+    QMessageBox::information(this, tr("Preferences"),
+                             tr("Language: View > Language (used from the next start).\n"
+                                "Stitch size, shaping and knitting method: dock \"Stitch settings\".\n"
+                                "Stitches and patterns: Catalog > Edit catalog."));
 }
 
 void MainWindow::setLanguage(const QString &locale)
@@ -579,7 +729,9 @@ void MainWindow::openFile()
     if (!openPattern(file, &error))
     {
         QMessageBox::warning(this, tr("Could not load the pattern"), error);
+        return;
     }
+    addRecentFile(file);
 }
 
 void MainWindow::pieceChanged()
@@ -1122,6 +1274,10 @@ bool MainWindow::saveProject(const QString &fileName, QString *error)
     m_undo->setClean();
     updateTitle();
     statusBar()->showMessage(tr("Project saved to %1").arg(fileName), 5000);
+    if (isVisible())
+    {
+        addRecentFile(fileName);
+    }
     return true;
 }
 
@@ -1197,7 +1353,9 @@ void MainWindow::openProjectDialog()
     if (!openProject(file, &error))
     {
         QMessageBox::warning(this, tr("Could not open the project"), error);
+        return;
     }
+    addRecentFile(file);
 }
 
 void MainWindow::saveProjectAction()
@@ -1457,6 +1615,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     if (maybeSave())
     {
+        qApp->Seamly2DSettings()->SetGeometry(saveGeometry());
+        qApp->Seamly2DSettings()->SetWindowState(saveState());
         event->accept();
     }
     else

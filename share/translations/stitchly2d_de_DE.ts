@@ -633,10 +633,6 @@
         <translation>&amp;Über Stitchly2D</translation>
     </message>
     <message>
-        <source>Tools</source>
-        <translation>Werkzeuge</translation>
-    </message>
-    <message>
         <source>Language</source>
         <translation>Sprache</translation>
     </message>
@@ -1127,6 +1123,66 @@ Die Versionen des Projekts verwenden? (Das ändert deinen Katalog für diese Sit
     <message>
         <source>&lt;b&gt;Stitchly2D&lt;/b&gt;&lt;br&gt;Prepares Seamly2D patterns for knitting.&lt;br&gt;&lt;br&gt;Built on the Seamly2D libraries (GPLv3).</source>
         <translation>&lt;b&gt;Stitchly2D&lt;/b&gt;&lt;br&gt;Bereitet Seamly2D-Schnittmuster zum Stricken vor.&lt;br&gt;&lt;br&gt;Gebaut auf den Seamly2D-Bibliotheken (GPLv3).</translation>
+    </message>
+    <message>
+        <source>Open &amp;recent</source>
+        <translation>&amp;Zuletzt geöffnet</translation>
+    </message>
+    <message>
+        <source>&amp;Preferences...</source>
+        <translation>&amp;Einstellungen...</translation>
+    </message>
+    <message>
+        <source>Zoom &amp;100%</source>
+        <translation>Zoom &amp;100%</translation>
+    </message>
+    <message>
+        <source>&amp;Pan zoom</source>
+        <translation>Ansicht &amp;verschieben</translation>
+    </message>
+    <message>
+        <source>Zoom to &amp;area</source>
+        <translation>Auf &amp;Bereich zoomen</translation>
+    </message>
+    <message>
+        <source>File</source>
+        <translation>Datei</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Bearbeiten</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>Export</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>&amp;Documentation</source>
+        <translation>&amp;Dokumentation</translation>
+    </message>
+    <message>
+        <source>About &amp;Qt</source>
+        <translation>Über &amp;Qt</translation>
+    </message>
+    <message>
+        <source>&amp;Clear list</source>
+        <translation>Liste &amp;leeren</translation>
+    </message>
+    <message>
+        <source>Preferences</source>
+        <translation>Einstellungen</translation>
+    </message>
+    <message>
+        <source>Language: View &gt; Language (used from the next start).
+Stitch size, shaping and knitting method: dock &quot;Stitch settings&quot;.
+Stitches and patterns: Catalog &gt; Edit catalog.</source>
+        <translation>Sprache: Ansicht &gt; Sprache (gilt ab dem nächsten Start).
+Maschengröße, Formgebung und Strickmethode: Dock „Maschenangaben“.
+Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
     </message>
 </context>
 <context>

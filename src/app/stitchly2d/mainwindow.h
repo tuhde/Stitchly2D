@@ -123,6 +123,8 @@ protected:
 private slots:
     void fitAll();
     void setLanguage(const QString &locale);
+    void preferences();
+    void openRecent(const QString &fileName);
     void editCatalog();
     void openProjectDialog();
     void saveProjectAction();
@@ -144,6 +146,8 @@ private slots:
     void removeOverlay();
 
 private:
+    void updateRecentMenu();
+    void addRecentFile(const QString &fileName);
     friend class StateCommand;
 
     /** Everything an undo step changes. */
@@ -211,6 +215,11 @@ private:
     QPlainTextEdit     *m_instructions = nullptr;
     bool                m_updating = false;
     QMenu              *m_viewMenu = nullptr;
+    QMenu              *m_recentMenu = nullptr;
+    QAction            *m_zoomIn = nullptr;
+    QAction            *m_zoomOut = nullptr;
+    QDoubleSpinBox     *m_zoomScale = nullptr;
+    bool                m_updatingZoom = false;
     QUndoStack         *m_undo = nullptr;
     State               m_lastState;       //!< the state the undo history is at
     int                 m_suppress = 0;    //!< >0 while changes are made that are recorded as one step later
