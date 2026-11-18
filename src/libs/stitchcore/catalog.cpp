@@ -1,5 +1,6 @@
 #include "catalog.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -65,12 +66,12 @@ bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
     p.name = o.value("name").toString();
     if (p.name.isEmpty())
     {
-        return fail(QStringLiteral("pattern without a name"));
+        return fail(QCoreApplication::translate("StitchCore", "pattern without a name"));
     }
     const QString kind = o.value("kind").toString();
     if (kind != QLatin1String("color") && kind != QLatin1String("special"))
     {
-        return fail(QStringLiteral("%1: kind must be \"special\" or \"color\"").arg(p.name));
+        return fail(QCoreApplication::translate("StitchCore", "%1: kind must be \"special\" or \"color\"").arg(p.name));
     }
     p.kind = kind == QLatin1String("color") ? Color : Special;
     p.width = o.value("width").toInt();
@@ -79,14 +80,14 @@ bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
     {
         if (!l.isString())
         {
-            return fail(QStringLiteral("%1: legend entries must be strings").arg(p.name));
+            return fail(QCoreApplication::translate("StitchCore", "%1: legend entries must be strings").arg(p.name));
         }
         p.legend << l.toString();
     }
     const QJsonArray rows = o.value("rows").toArray();
     if (p.width < 1 || p.height < 1 || rows.size() != p.height)
     {
-        return fail(QStringLiteral("%1: size does not match the rows").arg(p.name));
+        return fail(QCoreApplication::translate("StitchCore", "%1: size does not match the rows").arg(p.name));
     }
     p.cells.fill(-1, p.width * p.height);
     for (int i = 0; i < rows.size(); ++i)
@@ -94,7 +95,7 @@ bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
         const QJsonArray row = rows.at(i).toArray();
         if (row.size() != p.width)
         {
-            return fail(QStringLiteral("%1: row %2 has %3 cells, expected %4")
+            return fail(QCoreApplication::translate("StitchCore", "%1: row %2 has %3 cells, expected %4")
                             .arg(p.name).arg(i + 1).arg(row.size()).arg(p.width));
         }
         const int y = p.height - 1 - i;        // first row in the file is the top row
@@ -105,7 +106,7 @@ bool PatternDef::fromJson(const QJsonObject &o, PatternDef &out, QString *error)
     }
     if (!p.isValid())
     {
-        return fail(QStringLiteral("%1: a cell refers to a legend entry that does not exist").arg(p.name));
+        return fail(QCoreApplication::translate("StitchCore", "%1: a cell refers to a legend entry that does not exist").arg(p.name));
     }
     out = p;
     return true;
@@ -137,11 +138,11 @@ bool PatternDef::fromChart(const QString &name, Kind kind, const QVector<QString
     const QString trimmedName = name.trimmed();
     if (trimmedName.isEmpty())
     {
-        return fail(QStringLiteral("the pattern has no name"));
+        return fail(QCoreApplication::translate("StitchCore", "the pattern has no name"));
     }
     if (rowsTopFirst.isEmpty() || rowsTopFirst.first().isEmpty())
     {
-        return fail(QStringLiteral("%1: the chart has no cells").arg(trimmedName));
+        return fail(QCoreApplication::translate("StitchCore", "%1: the chart has no cells").arg(trimmedName));
     }
     PatternDef p;
     p.name = trimmedName;
@@ -153,7 +154,7 @@ bool PatternDef::fromChart(const QString &name, Kind kind, const QVector<QString
     {
         if (rowsTopFirst.at(i).size() != p.width)
         {
-            return fail(QStringLiteral("%1: row %2 has %3 cells, expected %4")
+            return fail(QCoreApplication::translate("StitchCore", "%1: row %2 has %3 cells, expected %4")
                             .arg(trimmedName).arg(i + 1).arg(rowsTopFirst.at(i).size()).arg(p.width));
         }
         const int y = p.height - 1 - i;
@@ -175,7 +176,7 @@ bool PatternDef::fromChart(const QString &name, Kind kind, const QVector<QString
     }
     if (p.legend.isEmpty())
     {
-        return fail(QStringLiteral("%1: the chart has no stitches or colors, fill in at least one cell").arg(trimmedName));
+        return fail(QCoreApplication::translate("StitchCore", "%1: the chart has no stitches or colors, fill in at least one cell").arg(trimmedName));
     }
     out = p;
     return true;

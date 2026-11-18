@@ -93,6 +93,8 @@ public:
     QString          translationsPath(const QString &locale = QString()) const;
 
     void             loadTranslations(const QString &locale);
+    /** File name prefix of the application's QM files, for example "seamly2d_". */
+    virtual QString  appTranslationPrefix() const;
 
     Unit             patternUnit() const;
     const Unit      *patternUnitP() const;

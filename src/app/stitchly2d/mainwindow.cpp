@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QBuffer>
 #include <QCloseEvent>
 #include <QCheckBox>
@@ -36,6 +37,7 @@
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
+#include "core/application_2d.h"
 #include "core/cli.h"
 #include "mcp/mcp_integration.h"
 #include "mcp/mcp_panel.h"
@@ -242,6 +244,23 @@ void MainWindow::createActions()
         viewMenu->addAction(dock->toggleViewAction());
     }
 
+    // Language: the choice is saved and used from the next start. The window is built in code from tr() strings
+    // at start-up, so it is not rebuilt on the fly.
+    QMenu *languageMenu = viewMenu->addMenu(tr("&Language"));
+    auto *languageGroup = new QActionGroup(this);
+    QComboBox languages;
+    InitLanguages(&languages);
+    const QString current = qApp->Seamly2DSettings()->getLocale();
+    for (int i = 0; i < languages.count(); ++i)
+    {
+        const QString locale = languages.itemData(i).toString();
+        QAction *item = languageMenu->addAction(languages.itemIcon(i), languages.itemText(i));
+        item->setCheckable(true);
+        item->setChecked(locale == current);
+        languageGroup->addAction(item);
+        connect(item, &QAction::triggered, this, [this, locale]() { setLanguage(locale); });
+    }
+
     QMenu *catalogMenu = menuBar()->addMenu(tr("&Catalog"));
     catalogMenu->addAction(tr("&Edit catalog (stitches and patterns)..."), this, &MainWindow::editCatalog);
 
@@ -258,6 +277,13 @@ void MainWindow::createActions()
     bar->addAction(fit);
     bar->addAction(zin);
     bar->addAction(zout);
+}
+
+void MainWindow::setLanguage(const QString &locale)
+{
+    qApp->Seamly2DSettings()->setLocale(locale);
+    QMessageBox::information(this, tr("Language"),
+                             tr("The language is changed after Stitchly2D is restarted."));
 }
 
 void MainWindow::createDocks()

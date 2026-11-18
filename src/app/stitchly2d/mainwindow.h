@@ -122,6 +122,7 @@ protected:
 
 private slots:
     void fitAll();
+    void setLanguage(const QString &locale);
     void editCatalog();
     void openProjectDialog();
     void saveProjectAction();

@@ -1,5 +1,6 @@
 #include "patternfile.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -28,7 +29,7 @@ bool exportPatterns(const QString &path, const QVector<PatternDef> &patterns, co
 {
     if (patterns.isEmpty())
     {
-        return fail(error, QStringLiteral("nothing to export"));
+        return fail(error, QCoreApplication::translate("StitchCore", "nothing to export"));
     }
     QSet<QString> names;
     QJsonArray arr;
@@ -36,11 +37,11 @@ bool exportPatterns(const QString &path, const QVector<PatternDef> &patterns, co
     {
         if (!p.isValid())
         {
-            return fail(error, QStringLiteral("pattern '%1' is not valid").arg(p.name));
+            return fail(error, QCoreApplication::translate("StitchCore", "pattern '%1' is not valid").arg(p.name));
         }
         if (names.contains(p.name))
         {
-            return fail(error, QStringLiteral("two patterns are named '%1'").arg(p.name));
+            return fail(error, QCoreApplication::translate("StitchCore", "two patterns are named '%1'").arg(p.name));
         }
         names.insert(p.name);
         arr.append(p.toJson());
@@ -70,27 +71,27 @@ bool importPatterns(const QString &path, QVector<PatternDef> &patterns, PatternF
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject())
     {
-        return fail(error, QStringLiteral("not a pattern file (%1)").arg(perr.errorString()));
+        return fail(error, QCoreApplication::translate("StitchCore", "not a pattern file (%1)").arg(perr.errorString()));
     }
     const QJsonObject root = doc.object();
     if (root.value("format").toString() != QLatin1String(formatId))
     {
-        return fail(error, QStringLiteral("not a Stitchly2D pattern file"));
+        return fail(error, QCoreApplication::translate("StitchCore", "not a Stitchly2D pattern file"));
     }
     const int version = root.value("version").toInt();
     if (version > kPatternFileVersion)
     {
-        return fail(error, QStringLiteral("file version %1 is newer than this program understands (%2)")
+        return fail(error, QCoreApplication::translate("StitchCore", "file version %1 is newer than this program understands (%2)")
                                .arg(version).arg(kPatternFileVersion));
     }
     if (version < 1)
     {
-        return fail(error, QStringLiteral("missing or invalid version"));
+        return fail(error, QCoreApplication::translate("StitchCore", "missing or invalid version"));
     }
     const QJsonArray arr = root.value("patterns").toArray();
     if (arr.isEmpty())
     {
-        return fail(error, QStringLiteral("the file contains no patterns"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the file contains no patterns"));
     }
     QVector<PatternDef> out;
     QSet<QString> names;
@@ -104,7 +105,7 @@ bool importPatterns(const QString &path, QVector<PatternDef> &patterns, PatternF
         }
         if (names.contains(p.name))
         {
-            return fail(error, QStringLiteral("two patterns are named '%1'").arg(p.name));
+            return fail(error, QCoreApplication::translate("StitchCore", "two patterns are named '%1'").arg(p.name));
         }
         names.insert(p.name);
         out.append(p);

@@ -15,6 +15,8 @@ UI_DIR = uic
 
 include(stitchly2d.pri)
 
+include(translations.pri)
+
 include(warnings.pri)
 
 # precompiled headers clash with the BUILD_REVISION define, thus disable here

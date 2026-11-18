@@ -1,5 +1,6 @@
 #include "project.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -94,7 +95,7 @@ bool overlayFromJson(const QJsonObject &j, Overlay &o, QString *error)
     o.offsetY = j.value("offsetY").toInt();
     if (o.pattern.isEmpty() || o.firstRow < 0 || o.rowCount < 0 || o.firstStitch < 0 || o.stitchCount < 0)
     {
-        return fail(error, QStringLiteral("a pattern placed on a band is not valid"));
+        return fail(error, QCoreApplication::translate("StitchCore", "a pattern placed on a band is not valid"));
     }
     return true;
 }
@@ -181,29 +182,29 @@ bool loadProject(const QString &path, Project &project, QString *error)
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject())
     {
-        return fail(error, QStringLiteral("not a project file (%1)").arg(perr.errorString()));
+        return fail(error, QCoreApplication::translate("StitchCore", "not a project file (%1)").arg(perr.errorString()));
     }
     const QJsonObject root = doc.object();
     if (root.value("format").toString() != QLatin1String(formatId))
     {
-        return fail(error, QStringLiteral("not a Stitchly2D project file"));
+        return fail(error, QCoreApplication::translate("StitchCore", "not a Stitchly2D project file"));
     }
     const int version = root.value("version").toInt();
     if (version > kProjectFileVersion)
     {
-        return fail(error, QStringLiteral("project version %1 is newer than this program understands (%2)")
+        return fail(error, QCoreApplication::translate("StitchCore", "project version %1 is newer than this program understands (%2)")
                                .arg(version).arg(kProjectFileVersion));
     }
     if (version < 1)
     {
-        return fail(error, QStringLiteral("missing or invalid version"));
+        return fail(error, QCoreApplication::translate("StitchCore", "missing or invalid version"));
     }
 
     Project out;
     out.patternFile = toAbsolute(path, root.value("pattern").toString());
     if (out.patternFile.isEmpty())
     {
-        return fail(error, QStringLiteral("the project does not name a pattern file"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the project does not name a pattern file"));
     }
     out.measurementsFile = toAbsolute(path, root.value("measurements").toString());
 
@@ -213,40 +214,40 @@ bool loadProject(const QString &path, Project &project, QString *error)
     out.settings.size.rowHeightMm = s.value("rowHeightMm").toDouble();
     if (!out.settings.size.isValid())
     {
-        return fail(error, QStringLiteral("the stitch width and row height must be greater than 0"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the stitch width and row height must be greater than 0"));
     }
     out.settings.includeSeamAllowance = s.value("includeSeamAllowance").toBool();
     out.settings.shaping.edgeStitches = s.value("edgeStitches").toInt(1);
     if (out.settings.shaping.edgeStitches < 0)
     {
-        return fail(error, QStringLiteral("the number of edge stitches must not be negative"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the number of edge stitches must not be negative"));
     }
     // Files from before this setting existed were made with shaping on every row.
     const QString shapeOn = s.value("shapeOn").toString(QStringLiteral("every"));
     if (shapeOn != QLatin1String("every") && shapeOn != QLatin1String("outside"))
     {
-        return fail(error, QStringLiteral("shapeOn must be \"outside\" or \"every\""));
+        return fail(error, QCoreApplication::translate("StitchCore", "shapeOn must be \"outside\" or \"every\""));
     }
     out.settings.shaping.shapeOn = shapeOn == QLatin1String("outside") ? ShapingRows::OutsideRows : ShapingRows::EveryRow;
     const QString method = s.value("method").toString(QStringLiteral("flat"));
     if (!knitMethodFromName(method, out.settings.shaping.method))
     {
-        return fail(error, QStringLiteral("unknown knitting method \"%1\"").arg(method));
+        return fail(error, QCoreApplication::translate("StitchCore", "unknown knitting method \"%1\"").arg(method));
     }
     out.settings.shaping.machineNeedles = s.value("machineNeedles").toInt(0);
     if (out.settings.shaping.machineNeedles < 0)
     {
-        return fail(error, QStringLiteral("the number of needles must not be negative"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the number of needles must not be negative"));
     }
     out.settings.shaping.bulkFrom = s.value("bulkFrom").toInt(4);      // files from before this setting: the default
     if (out.settings.shaping.bulkFrom < 0)
     {
-        return fail(error, QStringLiteral("the number of stitches from which edges are cast on or bound off must not be negative"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the number of stitches from which edges are cast on or bound off must not be negative"));
     }
     if (!increaseFromName(s.value("increase").toString(), out.settings.shaping.increase)
         || !decreaseFromName(s.value("decrease").toString(), out.settings.shaping.decrease))
     {
-        return fail(error, QStringLiteral("unknown increase or decrease method"));
+        return fail(error, QCoreApplication::translate("StitchCore", "unknown increase or decrease method"));
     }
 
     const QJsonObject pieces = root.value("pieces").toObject();
@@ -258,7 +259,7 @@ bool loadProject(const QString &path, Project &project, QString *error)
             KnitMethod pieceMethod;
             if (!knitMethodFromName(pieceObject.value("method").toString(), pieceMethod))
             {
-                return fail(error, QStringLiteral("piece \"%1\": unknown knitting method").arg(it.key()));
+                return fail(error, QCoreApplication::translate("StitchCore", "piece \"%1\": unknown knitting method").arg(it.key()));
             }
             out.methods.insert(it.key(), pieceMethod);
         }
@@ -271,7 +272,7 @@ bool loadProject(const QString &path, Project &project, QString *error)
             b.heightMm = bj.value("heightMm").toDouble();
             if (b.stitchType.isEmpty() || b.heightMm < 0)
             {
-                return fail(error, QStringLiteral("piece \"%1\": a band is not valid").arg(it.key()));
+                return fail(error, QCoreApplication::translate("StitchCore", "piece \"%1\": a band is not valid").arg(it.key()));
             }
             for (const QJsonValue &ov : bj.value("overlays").toArray())
             {
@@ -279,7 +280,7 @@ bool loadProject(const QString &path, Project &project, QString *error)
                 QString msg;
                 if (!overlayFromJson(ov.toObject(), o, &msg))
                 {
-                    return fail(error, QStringLiteral("piece \"%1\": %2").arg(it.key(), msg));
+                    return fail(error, QCoreApplication::translate("StitchCore", "piece \"%1\": %2").arg(it.key(), msg));
                 }
                 b.overlays.append(o);
             }
@@ -289,7 +290,7 @@ bool loadProject(const QString &path, Project &project, QString *error)
         {
             if (!pieceObject.contains("method"))
             {
-                return fail(error, QStringLiteral("piece \"%1\" has no bands").arg(it.key()));
+                return fail(error, QCoreApplication::translate("StitchCore", "piece \"%1\" has no bands").arg(it.key()));
             }
             continue;                    // only a knitting method for this piece
         }
@@ -298,7 +299,7 @@ bool loadProject(const QString &path, Project &project, QString *error)
 
     if (!StitchCatalog::fromJson(root.value("catalog").toObject(), out.catalog))
     {
-        return fail(error, QStringLiteral("the catalog inside the project is not valid"));
+        return fail(error, QCoreApplication::translate("StitchCore", "the catalog inside the project is not valid"));
     }
     project = out;
     return true;

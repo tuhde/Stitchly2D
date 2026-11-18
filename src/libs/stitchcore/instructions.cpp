@@ -3,20 +3,54 @@
 #include <QCoreApplication>
 #include <QHash>
 #include <QPair>
-#include <QRegularExpression>
 
 namespace stitchcore
 {
 
 namespace
 {
+/**
+ * Translations of the written instructions. The library does not depend on a GUI, so the strings are looked up with
+ * QCoreApplication::translate (context "Instructions"): without a translator the English text is returned.
+ */
+struct Instructions
+{
+    Q_DECLARE_TR_FUNCTIONS(Instructions)
+};
+
+/**
+ * "row" or "round": flat knitting works in rows, a tube is knitted in rounds. The words are filled into the sentences,
+ * so the sentences exist only once (in both languages "row" and "round" have the same grammatical gender).
+ */
+struct Words
+{
+    QString row, Row, rows, Rows;
+    explicit Words(bool round)
+    {
+        if (round)
+        {
+            row = Instructions::tr("round", "word for row in a tube");
+            Row = Instructions::tr("Round", "word for row in a tube");
+            rows = Instructions::tr("rounds", "word for row in a tube");
+            Rows = Instructions::tr("Rounds", "word for row in a tube");
+        }
+        else
+        {
+            row = Instructions::tr("row", "word for row in flat knitting");
+            Row = Instructions::tr("Row", "word for row in flat knitting");
+            rows = Instructions::tr("rows", "word for row in flat knitting");
+            Rows = Instructions::tr("Rows", "word for row in flat knitting");
+        }
+    }
+};
+
 QString incText(IncreaseMethod m)
 {
     switch (m)
     {
-        case IncreaseMethod::M1:       return QStringLiteral("M1");
-        case IncreaseMethod::YarnOver: return QStringLiteral("yo");
-        case IncreaseMethod::KFB:      return QStringLiteral("kfb");
+        case IncreaseMethod::M1:       return Instructions::tr("M1", "increase");
+        case IncreaseMethod::YarnOver: return Instructions::tr("yo", "increase");
+        case IncreaseMethod::KFB:      return Instructions::tr("kfb", "increase");
     }
     return QString();
 }
@@ -25,9 +59,9 @@ QString decText(DecreaseMethod m, bool leftEdge)
 {
     if (m == DecreaseMethod::K2tog)
     {
-        return QStringLiteral("k2tog");
+        return Instructions::tr("k2tog", "decrease");
     }
-    return leftEdge ? QStringLiteral("ssk") : QStringLiteral("k2tog");
+    return leftEdge ? Instructions::tr("ssk", "decrease") : Instructions::tr("k2tog", "decrease");
 }
 
 QString runsText(const QVector<Run> &runs)
@@ -57,12 +91,12 @@ bool isBulk(int change, const ShapingOptions &o)
 /** Where an edge change happens: at the edge of a flat piece, at the beginning or the end of a round. */
 QString whereText(const QString &side, KnitMethod m)
 {
+    const bool left = side == QLatin1String("left");
     if (m == KnitMethod::Flat)
     {
-        return QStringLiteral("%1 edge").arg(side);
+        return left ? Instructions::tr("left edge") : Instructions::tr("right edge");
     }
-    return side == QLatin1String("left") ? QStringLiteral("the beginning of the round")
-                                         : QStringLiteral("the end of the round");
+    return left ? Instructions::tr("the beginning of the round") : Instructions::tr("the end of the round");
 }
 
 QString edge(const QString &side, int change, const ShapingOptions &o)
@@ -74,42 +108,42 @@ QString edge(const QString &side, int change, const ShapingOptions &o)
     const bool left = side == QLatin1String("left");
     const int n = qAbs(change);
     const QString where = whereText(side, o.method);
-    const QString inc = QStringLiteral("increase %1 (%2)").arg(n).arg(incText(o.increase));
-    const QString dec = QStringLiteral("decrease %1 (%2)").arg(n).arg(decText(o.decrease, left));
+    const QString inc = Instructions::tr("increase %1 (%2)").arg(n).arg(incText(o.increase));
+    const QString dec = Instructions::tr("decrease %1 (%2)").arg(n).arg(decText(o.decrease, left));
     switch (o.method)
     {
         case KnitMethod::Flat:
             if (isBulk(change, o))
             {
-                return QStringLiteral("%1 %2 stitches at %3")
-                    .arg(change > 0 ? QStringLiteral("cast on") : QStringLiteral("bind off")).arg(n).arg(where);
+                return change > 0 ? Instructions::tr("cast on %1 stitches at %2").arg(n).arg(where)
+                                  : Instructions::tr("bind off %1 stitches at %2").arg(n).arg(where);
             }
-            return QStringLiteral("%1 at %2").arg(change > 0 ? inc : dec, where);
+            return Instructions::tr("%1 at %2").arg(change > 0 ? inc : dec, where);
 
         case KnitMethod::Round:
             // A tube has no edge to cast on or bind off at: a large change is spread over the round.
             if (isBulk(change, o))
             {
-                return QStringLiteral("%1 evenly across the round").arg(change > 0 ? inc : dec);
+                return Instructions::tr("%1 evenly across the round").arg(change > 0 ? inc : dec);
             }
-            return QStringLiteral("%1 at %2").arg(change > 0 ? inc : dec, where);
+            return Instructions::tr("%1 at %2").arg(change > 0 ? inc : dec, where);
 
         case KnitMethod::CircularMachine:
             if (change > 0)
             {
-                return QStringLiteral("bring %1 needle(s) into work at %2").arg(n).arg(where);
+                return Instructions::tr("bring %1 needle(s) into work at %2").arg(n).arg(where);
             }
-            return QStringLiteral("transfer %1 stitch(es) to the neighbouring needle(s) and take the empty needle(s) "
-                                  "out of work at %2").arg(n).arg(where);
+            return Instructions::tr("transfer %1 stitch(es) to the neighbouring needle(s) and take the empty needle(s) "
+                                    "out of work at %2").arg(n).arg(where);
 
         case KnitMethod::DoubleBedMachine:
         {
-            const QString beds = QStringLiteral("front bed %1, back bed %2").arg((n + 1) / 2).arg(n / 2);
+            const QString beds = Instructions::tr("front bed %1, back bed %2").arg((n + 1) / 2).arg(n / 2);
             if (change > 0)
             {
-                return QStringLiteral("bring %1 needle(s) into work at %2 (%3)").arg(n).arg(where, beds);
+                return Instructions::tr("bring %1 needle(s) into work at %2 (%3)").arg(n).arg(where, beds);
             }
-            return QStringLiteral("transfer %1 stitch(es) inward at %2 (%3) and take the empty needle(s) out of work")
+            return Instructions::tr("transfer %1 stitch(es) inward at %2 (%3) and take the empty needle(s) out of work")
                 .arg(n).arg(where, beds);
         }
     }
@@ -129,14 +163,26 @@ QString shapingBody(const Shaping &s, const ShapingOptions &o)
     // On a machine the needles at the edge are simply the ones that are moved.
     const bool plain = !isMachine(o.method)
                        && ((s.left != 0 && !isBulk(s.left, o)) || (s.right != 0 && !isBulk(s.right, o)));
-    return plain ? QStringLiteral("keep %1 edge stitch(es), %2").arg(o.edgeStitches).arg(body) : body;
+    return plain ? Instructions::tr("keep %1 edge stitch(es), %2").arg(o.edgeStitches).arg(body) : body;
 }
 
+/** "4th": the English suffixes are a translation too (German writes "4."). */
 QString ordinal(int n)
 {
     const int r100 = n % 100;
-    const char *suffix = (r100 >= 11 && r100 <= 13) ? "th" : n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th";
-    return QStringLiteral("%1%2").arg(n).arg(QLatin1String(suffix));
+    QString text;
+    if (r100 >= 11 && r100 <= 13)  text = Instructions::tr("%1th", "ordinal number");
+    else if (n % 10 == 1)          text = Instructions::tr("%1st", "ordinal number");
+    else if (n % 10 == 2)          text = Instructions::tr("%1nd", "ordinal number");
+    else if (n % 10 == 3)          text = Instructions::tr("%1rd", "ordinal number");
+    else                           text = Instructions::tr("%1th", "ordinal number");
+    return text.arg(n);
+}
+
+/** " (stitch type)" after a row number when the piece has more than one band. */
+QString typeSuffix(const StitchGrid &grid, int row, bool multi)
+{
+    return multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(row).band).stitchType) : QString();
 }
 }
 
@@ -147,29 +193,30 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     {
         return lines;
     }
+    const Words w(isRound(options.method));   // a tube is knitted in rounds, not in rows
     const bool multi = grid.bands().size() > 1;
     const QString startType = multi ? grid.bands().first().stitchType : QString();
     const int castOn = grid.castOn();
     switch (options.method)
     {
         case KnitMethod::Flat:
-            lines << QStringLiteral("Cast on %1 stitches%2.").arg(castOn)
-                         .arg(multi ? QStringLiteral(" and work in %1").arg(startType) : QString());
+            lines << Instructions::tr("Cast on %1 stitches%2.").arg(castOn)
+                         .arg(multi ? Instructions::tr(" and work in %1").arg(startType) : QString());
             break;
         case KnitMethod::Round:
-            lines << QStringLiteral("Cast on %1 stitches%2. Join in the round without twisting the stitches and place a "
-                                    "marker at the beginning of the round.").arg(castOn)
-                         .arg(multi ? QStringLiteral(" and work in %1").arg(startType) : QString());
+            lines << Instructions::tr("Cast on %1 stitches%2. Join in the round without twisting the stitches and place a "
+                                      "marker at the beginning of the round.").arg(castOn)
+                         .arg(multi ? Instructions::tr(" and work in %1").arg(startType) : QString());
             break;
         case KnitMethod::CircularMachine:
-            lines << QStringLiteral("Put %1 needles in work and cast on%2. Knit in rounds.").arg(castOn)
-                         .arg(multi ? QStringLiteral(" (work in %1)").arg(startType) : QString());
+            lines << Instructions::tr("Put %1 needles in work and cast on%2. Knit in rounds.").arg(castOn)
+                         .arg(multi ? Instructions::tr(" (work in %1)").arg(startType) : QString());
             break;
         case KnitMethod::DoubleBedMachine:
-            lines << QStringLiteral("Cast on %1 stitches tubular: %2 needles on the front bed and %3 on the back bed%4. "
-                                    "One round is two carriage passes: front bed, then back bed.")
+            lines << Instructions::tr("Cast on %1 stitches tubular: %2 needles on the front bed and %3 on the back bed%4. "
+                                      "One round is two carriage passes: front bed, then back bed.")
                          .arg(castOn).arg((castOn + 1) / 2).arg(castOn / 2)
-                         .arg(multi ? QStringLiteral(" (work in %1)").arg(startType) : QString());
+                         .arg(multi ? Instructions::tr(" (work in %1)").arg(startType) : QString());
             break;
     }
     // Does the piece fit the machine?
@@ -180,8 +227,8 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
         const int needed = options.method == KnitMethod::DoubleBedMachine ? (widest + 1) / 2 : widest;
         if (needed > options.machineNeedles)
         {
-            lines << QStringLiteral("Warning: the piece needs %1 needles%2, the machine has %3.")
-                         .arg(needed).arg(options.method == KnitMethod::DoubleBedMachine ? QStringLiteral(" per bed") : QString())
+            lines << Instructions::tr("Warning: the piece needs %1 needles%2, the machine has %3.")
+                         .arg(needed).arg(options.method == KnitMethod::DoubleBedMachine ? Instructions::tr(" per bed") : QString())
                          .arg(options.machineNeedles);
         }
     }
@@ -190,7 +237,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
     for (const Segment &t : segments) anyShaping = anyShaping || (t.shaped && !t.shaping.bandChange);
     if (anyShaping && options.method == KnitMethod::Flat && options.shapeOn == ShapingRows::OutsideRows)
     {
-        lines << QStringLiteral("Row 1 is an outside row. Increases and decreases are worked on outside rows only.");
+        lines << Instructions::tr("Row 1 is an outside row. Increases and decreases are worked on outside rows only.");
     }
     for (int si = 0; si < segments.size(); ++si)
     {
@@ -228,15 +275,14 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             if (run.size() >= 3 && plainRows)
             {
                 const Shaping &z = segments.at(run.last()).shaping;
-                const QString cadence = gap == 1 ? QStringLiteral("every row")
-                                       : gap == 2 ? QStringLiteral("every other row")
-                                                  : QStringLiteral("every %1 row").arg(ordinal(gap));
-                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(s.shaping.row).band).stitchType)
-                                           : QString();
-                lines << QStringLiteral("Rows %1-%2%3: %4 (%5 times) starting with row %1: %6%7. (%8 -> %9 stitches)")
-                             .arg(s.shaping.row + 1).arg(lastRow + 1).arg(type).arg(cadence).arg(run.size())
+                const QString cadence = gap == 1 ? Instructions::tr("every %1").arg(w.row)
+                                       : gap == 2 ? Instructions::tr("every other %1").arg(w.row)
+                                                  : Instructions::tr("every %1 %2").arg(ordinal(gap), w.row);
+                lines << Instructions::tr("%1 %2-%3%4: %5 (%6 times) starting with %7 %2: %8%9. (%10 -> %11 stitches)")
+                             .arg(w.Rows).arg(s.shaping.row + 1).arg(lastRow + 1).arg(typeSuffix(grid, s.shaping.row, multi))
+                             .arg(cadence).arg(run.size()).arg(w.row)
                              .arg(shapingBody(s.shaping, options))
-                             .arg(gap == 1 ? QString() : QStringLiteral("; work the other rows even"))
+                             .arg(gap == 1 ? QString() : Instructions::tr("; work the other %1 even").arg(w.rows))
                              .arg(s.shaping.stitchesAfter - s.shaping.left - s.shaping.right).arg(z.stitchesAfter);
                 si = run.last();
                 continue;
@@ -249,21 +295,20 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             auto flush = [&](int endRow) {
                 const int n = endRow - blockStart;
                 if (n <= 0) return;
-                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(blockStart).band).stitchType)
-                                           : QString();
                 if (n == 1)
-                    lines << QStringLiteral("Row %1%2: work even.").arg(blockStart + 1).arg(type);
+                    lines << Instructions::tr("%1 %2%3: work even.").arg(w.Row).arg(blockStart + 1)
+                                 .arg(typeSuffix(grid, blockStart, multi));
                 else
-                    lines << QStringLiteral("Rows %1-%2%3: work even.").arg(blockStart + 1).arg(endRow).arg(type);
+                    lines << Instructions::tr("%1 %2-%3%4: work even.").arg(w.Rows).arg(blockStart + 1).arg(endRow)
+                                 .arg(typeSuffix(grid, blockStart, multi));
             };
             for (int r = s.firstRow; r < s.firstRow + s.rows; ++r)
             {
                 const QVector<Run> runs = grid.overlayRuns(r);
                 if (runs.isEmpty()) continue;
                 flush(r);
-                const QString type = multi ? QStringLiteral(" (%1)").arg(grid.bands().at(grid.rows().at(r).band).stitchType)
-                                           : QString();
-                lines << QStringLiteral("Row %1%2: %3.").arg(r + 1).arg(type).arg(runsText(runs));
+                lines << Instructions::tr("%1 %2%3: %4.").arg(w.Row).arg(r + 1).arg(typeSuffix(grid, r, multi))
+                             .arg(runsText(runs));
                 blockStart = r + 1;
             }
             flush(s.firstRow + s.rows);
@@ -274,66 +319,52 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             const QString &name = grid.bands().at(s.shaping.band).stitchType;
             if (s.shaping.stitchesBefore == s.shaping.stitchesAfter)
             {
-                lines << QStringLiteral("Row %1: change to %2 (%3 stitches).")
-                             .arg(first).arg(name).arg(s.shaping.stitchesAfter);
+                lines << Instructions::tr("%1 %2: change to %3 (%4 stitches).")
+                             .arg(w.Row).arg(first).arg(name).arg(s.shaping.stitchesAfter);
             }
             else
             {
                 const int d = s.shaping.stitchesAfter - s.shaping.stitchesBefore;
-                lines << QStringLiteral("Row %1: change to %2 and %3 %4 stitches evenly across the row (%5 -> %6 stitches).")
-                             .arg(first).arg(name)
-                             .arg(d > 0 ? QStringLiteral("increase") : QStringLiteral("decrease"))
-                             .arg(qAbs(d)).arg(s.shaping.stitchesBefore).arg(s.shaping.stitchesAfter);
+                lines << (d > 0 ? Instructions::tr("%1 %2: change to %3 and increase %4 stitches evenly across the %5 "
+                                                   "(%6 -> %7 stitches).")
+                                : Instructions::tr("%1 %2: change to %3 and decrease %4 stitches evenly across the %5 "
+                                                   "(%6 -> %7 stitches)."))
+                             .arg(w.Row).arg(first).arg(name).arg(qAbs(d)).arg(w.row)
+                             .arg(s.shaping.stitchesBefore).arg(s.shaping.stitchesAfter);
             }
             const QVector<Run> bruns = grid.overlayRuns(s.firstRow);
             if (!bruns.isEmpty())
             {
-                lines << QStringLiteral("    pattern: %1.").arg(runsText(bruns));
+                lines << Instructions::tr("    pattern: %1.").arg(runsText(bruns));
             }
             continue;
         }
-        lines << QStringLiteral("Row %1: %2. (%3 stitches)").arg(first).arg(shapingBody(s.shaping, options))
+        lines << Instructions::tr("%1 %2: %3. (%4 stitches)").arg(w.Row).arg(first).arg(shapingBody(s.shaping, options))
                      .arg(s.shaping.stitchesAfter);
         const QVector<Run> eruns = grid.overlayRuns(s.firstRow);
         if (!eruns.isEmpty())
         {
-            lines << QStringLiteral("    pattern: %1.").arg(runsText(eruns));
+            lines << Instructions::tr("    pattern: %1.").arg(runsText(eruns));
         }
     }
     switch (options.method)
     {
         case KnitMethod::CircularMachine:
-            lines << QStringLiteral("Take the work off the machine: bind off %1 stitches.").arg(grid.bindOff());
+            lines << Instructions::tr("Take the work off the machine: bind off %1 stitches.").arg(grid.bindOff());
             break;
         case KnitMethod::DoubleBedMachine:
-            lines << QStringLiteral("Take the work off both beds: bind off %1 stitches.").arg(grid.bindOff());
+            lines << Instructions::tr("Take the work off both beds: bind off %1 stitches.").arg(grid.bindOff());
             break;
         default:
-            lines << QStringLiteral("Bind off %1 stitches.").arg(grid.bindOff());
+            lines << Instructions::tr("Bind off %1 stitches.").arg(grid.bindOff());
             break;
-    }
-    if (isRound(options.method))
-    {
-        // A tube is knitted in rounds, not in rows.
-        static const QVector<QPair<QRegularExpression, QString>> words = {
-            {QRegularExpression(QStringLiteral("^Rows ")), QStringLiteral("Rounds ")},
-            {QRegularExpression(QStringLiteral("^Row ")), QStringLiteral("Round ")},
-            {QRegularExpression(QStringLiteral("every other row")), QStringLiteral("every other round")},
-            {QRegularExpression(QStringLiteral("every row")), QStringLiteral("every round")},
-            {QRegularExpression(QStringLiteral("(\\d+(?:st|nd|rd|th)) row")), QStringLiteral("\\1 round")},
-            {QRegularExpression(QStringLiteral("other rows even")), QStringLiteral("other rounds even")},
-            {QRegularExpression(QStringLiteral("starting with row")), QStringLiteral("starting with round")},
-            {QRegularExpression(QStringLiteral("across the row")), QStringLiteral("across the round")}};
-        for (QString &line : lines)
-        {
-            for (const auto &w : words) line.replace(w.first, w.second);
-        }
     }
     return lines;
 }
 
 QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options)
 {
+    // The CSV is meant for other programs: its header stays English in every language.
     QString csv = QStringLiteral("row;band;stitch type;first stitch;count;change left;change right\n");
     const QVector<Row> &rows = grid.rows();
     const QVector<int> counts = plannedCounts(grid, options.effectiveShapeOn());
@@ -350,3 +381,4 @@ QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options)
 }
 
 }
+

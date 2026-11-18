@@ -64,6 +64,8 @@ private slots:
     void methodCircularMachine();
     void methodDoubleBedMachine();
     void methodsInProjects();
+    void translationsComplete();
+    void instructionsTranslatable();
 };
 
 static StitchSize g20x30() { StitchSize s; s.stitchWidthMm = 5.0; s.rowHeightMm = 100.0 / 30; return s; }
@@ -1228,6 +1230,75 @@ void TstStitchCore::methodsInProjects()
     pieces["Sleeve"] = QJsonObject();                                      // neither bands nor method
     QVERIFY(!loadProject(write("bad4.stitchly"), q, &error));
     QVERIFY(error.contains("Sleeve"));
+}
+
+// Every translation file is complete and keeps the placeholders (%1, %2, ...) of its source text.
+void TstStitchCore::translationsComplete()
+{
+    const QStringList files = QDir(QStringLiteral(TS_DIR)).entryList({QStringLiteral("stitchly2d_*.ts")}, QDir::Files);
+    QVERIFY2(!files.isEmpty(), "no stitchly2d_*.ts found in " TS_DIR);
+    const QRegularExpression placeholder(QStringLiteral("%(\\d+)"));
+    auto placeholders = [&](const QString &text) {
+        QStringList found;
+        for (auto it = placeholder.globalMatch(text); it.hasNext();) found << it.next().captured(1);
+        found.removeDuplicates();
+        found.sort();
+        return found;
+    };
+    for (const QString &name : files)
+    {
+        QFile file(QDir(QStringLiteral(TS_DIR)).filePath(name));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QXmlStreamReader xml(&file);
+        QString source;
+        int messages = 0;
+        while (!xml.atEnd())
+        {
+            xml.readNext();
+            if (!xml.isStartElement()) continue;
+            if (xml.name() == QLatin1String("source"))
+            {
+                source = xml.readElementText();
+            }
+            else if (xml.name() == QLatin1String("translation"))
+            {
+                const QString type = xml.attributes().value(QStringLiteral("type")).toString();
+                const QString text = xml.readElementText();
+                ++messages;
+                QVERIFY2(type != QLatin1String("unfinished"), qPrintable(name + ": not translated: " + source));
+                QVERIFY2(!text.isEmpty(), qPrintable(name + ": empty translation of: " + source));
+                QCOMPARE(placeholders(text), placeholders(source));
+            }
+        }
+        QVERIFY2(!xml.hasError(), qPrintable(name + ": " + xml.errorString()));
+        QVERIFY(messages > 100);
+    }
+}
+
+// The instruction text goes through the translator: a translator changes the words, the numbers stay.
+void TstStitchCore::instructionsTranslatable()
+{
+    class Upper : public QTranslator
+    {
+    public:
+        QString translate(const char *context, const char *source, const char *, int) const override
+        {
+            return QLatin1String(context) == QLatin1String("Instructions") && QLatin1String(source) == "Bind off %1 stitches."
+                       ? QStringLiteral("Maschen abketten: %1") : QString();
+        }
+    };
+    int argc = 1;
+    char name[] = "tst_stitchcore";
+    char *argv[] = {name, nullptr};
+    QCoreApplication app(argc, argv);
+    Upper translator;
+    app.installTranslator(&translator);
+    const StitchGrid grid = StitchGrid::build(QPolygonF(QRectF(0, 0, 100, 100)), g20x30());
+    ShapingOptions o;
+    const QStringList lines = writeInstructions(grid, o);
+    QVERIFY(!lines.isEmpty());
+    QVERIFY2(lines.last().startsWith(QStringLiteral("Maschen abketten: ")), qPrintable(lines.join('\n')));
+    app.removeTranslator(&translator);
 }
 
 QTEST_APPLESS_MAIN(TstStitchCore)

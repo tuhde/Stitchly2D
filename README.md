@@ -59,6 +59,23 @@ bind-off stitches and the written instructions for every piece. `--csv` prints t
 pattern. Pieces are turned so their grainline is vertical. `--cli` needs no display. `src/test/smoke_test.sh
 <path to stitchly2d>` runs it on the bundled sample patterns.
 
+## Languages
+
+The program is written in English; German is the first translation. View > Language saves the choice (used from the
+next start), the default is the system language, and `--lang de_DE` sets it for one run (also with `--cli`, so the
+written instructions come out in German). The `.qm` files are built from `share/translations/stitchly2d_<locale>.ts`
+and embedded in the program.
+
+To add a language, for example French:
+
+1. add `fr_FR` to `LANGUAGES` in `src/app/stitchly2d/translations.pri` and `share/translations/translations.pro`,
+2. run `make lupdate` in the build directory (collects the strings into `stitchly2d_fr_FR.ts`),
+3. translate the file in Qt Linguist and rebuild.
+
+`tst_stitchcore` checks that every `.ts` file has no unfinished or empty entry and keeps the `%1` placeholders. Text in
+code that is not a `QObject` uses `QCoreApplication::translate` (contexts `Instructions`, `StitchCore`, `Cli`, `main`).
+The names of the catalog's stitches and patterns, the CSV header and the tool descriptions for Claude stay English.
+
 ## Source layout
 
 | Path | Content |

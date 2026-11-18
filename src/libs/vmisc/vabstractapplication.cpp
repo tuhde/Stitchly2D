@@ -291,7 +291,7 @@ void VAbstractApplication::loadTranslations(const QString &locale)
 #endif
 
     // Explicitly cast to void to suppress clang warnings
-    (void)appTranslator->load("seamly2d_" + locale, translationsPath(locale));
+    (void)appTranslator->load(appTranslationPrefix() + locale, translationsPath(locale));
     (void)pmsTranslator->load("measurements_" + locale, translationsPath(locale));
 
     installTranslator(qtTranslator);
@@ -301,6 +301,12 @@ void VAbstractApplication::loadTranslations(const QString &locale)
     installTranslator(pmsTranslator);
 
     initTranslateVariables();//Very important do it after load QM files.
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+QString VAbstractApplication::appTranslationPrefix() const
+{
+    return QStringLiteral("seamly2d_");
 }
 
 //---------------------------------------------------------------------------------------------------------------------

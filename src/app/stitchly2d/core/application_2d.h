@@ -33,6 +33,7 @@ public:
     const VTranslateVars *translateVariables() override;
     void                  openSettings() override;
     bool                  isAppInGUIMode() const override;
+    QString               appTranslationPrefix() const override;
 
     VSettings            *Seamly2DSettings();
 

@@ -933,7 +933,7 @@ void InitLanguages(QComboBox *combobox)
     combobox->clear();
 
     QStringList fileNames;
-    QDirIterator it(qApp->translationsPath(), QStringList("seamly2d_*.qm"), QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(qApp->translationsPath(), QStringList(qApp->appTranslationPrefix() + "*.qm"), QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext())
     {
         it.next();

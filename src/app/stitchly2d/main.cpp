@@ -36,38 +36,46 @@ int main(int argc, char *argv[])
     Application2D app(argc, argv);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Prepares Seamly2D patterns for knitting."));
+    parser.setApplicationDescription(QCoreApplication::translate("main", "Prepares Seamly2D patterns for knitting."));
     parser.addHelpOption();
     parser.addPositionalArgument(QStringLiteral("pattern"),
-                                 QStringLiteral("Seamly2D pattern (.sm2d) or Stitchly2D project (.stitchly), optional."));
+                                 QCoreApplication::translate("main", "Seamly2D pattern (.sm2d) or Stitchly2D project (.stitchly), optional."));
     QCommandLineOption stitchW({QStringLiteral("w"), QStringLiteral("stitch-width")},
-                               QStringLiteral("Width of one stitch in mm (default 5)."), QStringLiteral("mm"),
+                               QCoreApplication::translate("main", "Width of one stitch in mm (default 5)."), QStringLiteral("mm"),
                                QStringLiteral("5"));
     QCommandLineOption rowH({QStringLiteral("r"), QStringLiteral("row-height")},
-                            QStringLiteral("Height of one row in mm (default 3.5)."), QStringLiteral("mm"),
+                            QCoreApplication::translate("main", "Height of one row in mm (default 3.5)."), QStringLiteral("mm"),
                             QStringLiteral("3.5"));
     QCommandLineOption meas({QStringLiteral("m"), QStringLiteral("measurements")},
-                            QStringLiteral("Measurement file to use instead of the one in the pattern."),
+                            QCoreApplication::translate("main", "Measurement file to use instead of the one in the pattern."),
                             QStringLiteral("file"));
-    QCommandLineOption allowance(QStringLiteral("seam-allowance"), QStringLiteral("Include the seam allowance."));
-    QCommandLineOption csv(QStringLiteral("csv"), QStringLiteral("Print the row table as CSV instead of instructions."));
-    QCommandLineOption cli(QStringLiteral("cli"), QStringLiteral("Print the result as text instead of opening the window."));
+    QCommandLineOption allowance(QStringLiteral("seam-allowance"), QCoreApplication::translate("main", "Include the seam allowance."));
+    QCommandLineOption csv(QStringLiteral("csv"), QCoreApplication::translate("main", "Print the row table as CSV instead of instructions."));
+    QCommandLineOption cli(QStringLiteral("cli"), QCoreApplication::translate("main", "Print the result as text instead of opening the window."));
     QCommandLineOption shot(QStringLiteral("screenshot"),
-                            QStringLiteral("Open the window, save a picture of it to this file and quit."),
+                            QCoreApplication::translate("main", "Open the window, save a picture of it to this file and quit."),
                             QStringLiteral("file"));
     QCommandLineOption shapeOnOption(QStringLiteral("shape-on"),
-                                     QStringLiteral("With --cli: shape the edges on \"outside\" rows only (default) or on \"every\" row."),
+                                     QCoreApplication::translate("main", "With --cli: shape the edges on \"outside\" rows only (default) or on \"every\" row."),
                                      QStringLiteral("rows"));
     QCommandLineOption methodOption(QStringLiteral("method"),
-                                    QStringLiteral("With --cli: knit all pieces flat, round, circular_machine or double_bed_machine."),
+                                    QCoreApplication::translate("main", "With --cli: knit all pieces flat, round, circular_machine or double_bed_machine."),
                                     QStringLiteral("method"));
     QCommandLineOption needlesOption(QStringLiteral("needles"),
-                                     QStringLiteral("With --cli: needles of the circular machine, or per bed of the double-bed machine."),
+                                     QCoreApplication::translate("main", "With --cli: needles of the circular machine, or per bed of the double-bed machine."),
                                      QStringLiteral("n"));
-    QCommandLineOption pieceOption(QStringLiteral("piece"), QStringLiteral("With --cli: only this piece."),
+    QCommandLineOption pieceOption(QStringLiteral("piece"), QCoreApplication::translate("main", "With --cli: only this piece."),
                                    QStringLiteral("name"));
-    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption, shapeOnOption, methodOption, needlesOption});
+    QCommandLineOption langOption(QStringLiteral("lang"),
+                                  QCoreApplication::translate("main", "Language for this run, for example de_DE (default: the saved choice)."),
+                                  QStringLiteral("locale"));
+    parser.addOptions({cli, shot, stitchW, rowH, meas, allowance, csv, pieceOption, shapeOnOption, methodOption, needlesOption,
+                       langOption});
     parser.process(app);
+    if (parser.isSet(langOption))
+    {
+        app.loadTranslations(parser.value(langOption));
+    }
 
     if (!parser.isSet(cli))
     {
@@ -79,7 +87,7 @@ int main(int argc, char *argv[])
             const bool project = first.endsWith(QStringLiteral(".stitchly"), Qt::CaseInsensitive);
             if (!(project ? window.openProject(first, &openError) : window.openPattern(first, &openError)))
             {
-                QTextStream(stderr) << "Could not load the pattern: " << openError << "\n";
+                QTextStream(stderr) << QCoreApplication::translate("main", "Could not load the pattern: %1").arg(openError) << "\n";
                 if (parser.isSet(shot)) return 1;
             }
         }
@@ -99,7 +107,7 @@ int main(int argc, char *argv[])
     QTextStream err(stderr);
     if (parser.positionalArguments().size() != 1)
     {
-        err << "--cli needs exactly one pattern (.sm2d) or project (.stitchly) file. See --help.\n";
+        err << QCoreApplication::translate("main", "--cli needs exactly one pattern (.sm2d) or project (.stitchly) file. See --help.") << "\n";
         return 2;
     }
     CliOptions options;
@@ -120,7 +128,7 @@ int main(int argc, char *argv[])
         options.needles = parser.value(needlesOption).toInt(&ok);
         if (!ok || options.needles < 0)
         {
-            err << "--needles must be a number, 0 or more.\n";
+            err << QCoreApplication::translate("main", "--needles must be a number, 0 or more.") << "\n";
             return 2;
         }
     }

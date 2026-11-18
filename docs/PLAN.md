@@ -13,7 +13,7 @@ Decisions made: **sibling app with Seamly2D's shared libs copied in (vendored)**
 - `Stitchly2D.pro` (subdirs `src`), `common.pri` (copied and trimmed from Seamly2D: c++14, PCH, `FindBuildRevision`), GPLv3 `LICENSE`, and a `NOTICE` recording the Seamly2D commit the libs were copied from.
 - `src/libs/`: copy these from Seamly2D unchanged, so upstream diffs stay easy: `qmuparser`, `ifc`, `vgeometry`, `vpatterndb`, `vlayout`, `vmisc`, `vformat`, `vwidgets`, `vpropertyexplorer`. Leave out `vtools`, `vmcp`, `fervor`, `vdxf`, `vobj` and `vtest` for now.
 - `src/libs/stitchcore/` (new static lib, no GUI): the knitting logic, described below.
-- `src/app/stitchly2d/` (new app): `main.cpp`, `ApplicationStitchly` (derived from `VAbstractApplication`), `mainwindow.{h,cpp,ui}`, `version.h`, `stitchly2d.pro/.pri`, `share/resources`, and translations. Model it on `src/app/seamlyme` (the smaller sibling app).
+- `src/app/stitchly2d/` (new app): `main.cpp`, `ApplicationStitchly` (derived from `VAbstractApplication`), `mainwindow.{h,cpp,ui}`, `version.h`, `stitchly2d.pro/.pri`, `share/resources`, and translations (`share/translations`, see README "Languages"; done for German). Model it on `src/app/seamlyme` (the smaller sibling app).
 - Look and feel: reuse the vmisc theme and icon resources (`icon/icons/theme.qrc`), `VCommonSettings`/`VSettings` for preferences and themes, the `VMainGraphicsScene`/`VMainGraphicsView` canvas and the same dock/toolbar layout (pieces list, properties dock, canvas). Add a Stitchly-specific icon set and name.
 
 ### 2. Pattern import (reuse, not rewrite) - done

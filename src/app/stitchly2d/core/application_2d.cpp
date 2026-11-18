@@ -15,9 +15,15 @@ Application2D::Application2D(int &argc, char **argv)
     undoStack = new QUndoStack(this);
     openSettings();
     initTranslateVariables();
+    loadTranslations(Seamly2DSettings()->getLocale());
     // Pieces are measured from their seam line; labels need a document and are not used.
     Settings()->setShowGrainlines(true);
     Settings()->setShowLabels(false);
+}
+
+QString Application2D::appTranslationPrefix() const
+{
+    return QStringLiteral("stitchly2d_");
 }
 
 const VTranslateVars *Application2D::translateVariables()

@@ -1,5 +1,6 @@
 #include "cli.h"
 
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QMap>
 #include <QStandardPaths>
@@ -42,7 +43,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
         QString error;
         if (!loadProject(options.input, project, &error))
         {
-            err << "Could not load the project: " << error << "\n";
+            err << QCoreApplication::translate("Cli", "Could not load the project: %1").arg(error) << "\n";
             return 1;
         }
         // A project is run with the stitches and patterns it was made with.
@@ -65,7 +66,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     const bool hasForcedMethod = !options.method.isEmpty();
     if (hasForcedMethod && !knitMethodFromName(options.method, forcedMethod))
     {
-        err << "--method must be flat, round, circular_machine or double_bed_machine.\n";
+        err << QCoreApplication::translate("Cli", "--method must be flat, round, circular_machine or double_bed_machine.") << "\n";
         return 2;
     }
     if (options.needles >= 0) settings.shaping.machineNeedles = options.needles;
@@ -73,14 +74,14 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     {
         if (options.shapeOn != QLatin1String("outside") && options.shapeOn != QLatin1String("every"))
         {
-            err << "--shape-on must be \"outside\" or \"every\".\n";
+            err << QCoreApplication::translate("Cli", "--shape-on must be \"outside\" or \"every\".") << "\n";
             return 2;
         }
         settings.shaping.shapeOn = options.shapeOn == QLatin1String("every") ? ShapingRows::EveryRow : ShapingRows::OutsideRows;
     }
     if (!settings.size.isValid())
     {
-        err << "Stitch width and row height must be greater than 0.\n";
+        err << QCoreApplication::translate("Cli", "Stitch width and row height must be greater than 0.") << "\n";
         return 2;
     }
     catalog.basics().set({QString::fromLatin1(kDefaultStitchName), settings.size});
@@ -89,7 +90,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     QString error;
     if (!loadPattern(patternFile, pattern, &error, measurements))
     {
-        err << "Could not load the pattern: " << error << "\n";
+        err << QCoreApplication::translate("Cli", "Could not load the pattern: %1").arg(error) << "\n";
         return 1;
     }
     if (!options.piece.isEmpty())
@@ -100,27 +101,29 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
         {
             QStringList names;
             for (const LoadedPiece &p : pattern.pieces) names << p.name;
-            err << "No piece named \"" << options.piece << "\". The pieces are: " << names.join(QStringLiteral(", ")) << "\n";
+            err << QCoreApplication::translate("Cli", "No piece named \"%1\". The pieces are: %2").arg(options.piece, names.join(QStringLiteral(", "))) << "\n";
             return 2;
         }
     }
 
     if (isProject)
     {
-        out << "Project: " << options.input << "\n";
+        out << QCoreApplication::translate("Cli", "Project: %1").arg(options.input) << "\n";
         if (!replaced.isEmpty())
         {
-            out << "Catalog entries used as stored in the project: " << replaced.join(QStringLiteral(", ")) << "\n";
+            out << QCoreApplication::translate("Cli", "Catalog entries used as stored in the project: %1").arg(replaced.join(QStringLiteral(", "))) << "\n";
         }
     }
-    out << "Pattern: " << pattern.fileName << "\n";
+    out << QCoreApplication::translate("Cli", "Pattern: %1").arg(pattern.fileName) << "\n";
     if (!pattern.measurementsFile.isEmpty())
     {
-        out << "Measurements: " << pattern.measurementsFile << "\n";
+        out << QCoreApplication::translate("Cli", "Measurements: %1").arg(pattern.measurementsFile) << "\n";
     }
-    out << pattern.pieces.size() << " piece(s), default stitch " << settings.size.stitchWidthMm << " x row "
-        << settings.size.rowHeightMm << " mm (" << settings.size.stitchesPer10cm() << " sts x "
-        << settings.size.rowsPer10cm() << " rows per 10 cm)\n";
+    out << QCoreApplication::translate("Cli", "%1 piece(s), default stitch %2 x row %3 mm (%4 sts x %5 rows per 10 cm)")
+               .arg(pattern.pieces.size()).arg(settings.size.stitchWidthMm, 0, 'g', 6)
+               .arg(settings.size.rowHeightMm, 0, 'g', 6).arg(settings.size.stitchesPer10cm(), 0, 'g', 6)
+               .arg(settings.size.rowsPer10cm(), 0, 'g', 6)
+        << "\n";
 
     for (const LoadedPiece &piece : pattern.pieces)
     {
@@ -143,13 +146,16 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
         out << "\n== " << piece.name << " ==\n";
         if (grid.isEmpty())
         {
-            out << "(no stitches" << (isProject ? ": check the bands of this piece" : "") << ")\n";
+            out << (isProject ? QCoreApplication::translate("Cli", "(no stitches: check the bands of this piece)")
+                              : QCoreApplication::translate("Cli", "(no stitches)")) << "\n";
             continue;
         }
-        out << grid.rowCount() << " rows, cast on " << grid.castOn() << ", widest " << grid.width()
-            << ", bind off " << grid.bindOff()
+        out << QCoreApplication::translate("Cli", "%1 rows, cast on %2, widest %3, bind off %4")
+                   .arg(grid.rowCount()).arg(grid.castOn()).arg(grid.width()).arg(grid.bindOff())
             << (isRound(shaping.method) ? QStringLiteral("  [%1]").arg(knitMethodName(shaping.method)) : QString())
-            << (piece.grainline.isNull() ? "  [no grainline: drawn orientation used]" : "") << "\n";
+            << (piece.grainline.isNull() ? QCoreApplication::translate("Cli", "  [no grainline: drawn orientation used]")
+                                         : QString())
+            << "\n";
         if (options.csv)
         {
             out << rowTableCsv(grid, shaping);
