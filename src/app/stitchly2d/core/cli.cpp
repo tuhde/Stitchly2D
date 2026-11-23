@@ -6,7 +6,7 @@
 #include <QStandardPaths>
 #include <QTextStream>
 
-#include "pattern_loader.h"
+#include "../stitchload/core/pattern_loader.h"
 #include "../../../libs/stitchcore/instructions.h"
 #include "../../../libs/stitchcore/pieceoutline.h"
 #include "../../../libs/stitchcore/project.h"

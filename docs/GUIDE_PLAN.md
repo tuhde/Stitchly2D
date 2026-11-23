@@ -6,10 +6,10 @@ Goal: a program that shows an open dialog for a pattern, then shows its instruct
 ## Recommendation: a second program in this repo (not a new repo, not a view mode)
 - **Not a new repo:** it needs `stitchcore` (grid, shaping, `writeInstructions`, `.stitchly` project format) and the pattern loader (`src/app/stitchly2d/core/pattern_loader.*`), which are still changing. A separate repo means duplicating or vendoring them.
 - **Not a view mode of the editor:** different runtime (appliance on a Pi, touch only, no editing/catalog/MCP/undo, must be stable and start fast, owns hardware access). The editor is a big Widgets app with Seamly libs, multimedia and network modules. Hardware access and kiosk lifecycle belong in a small separate process.
-- **Chosen:** new app `src/app/stitchly2d-guide/` (name open) added to `src/app/app.pro` SUBDIRS; same repo, same qmake build, built natively on the Pi (Raspberry Pi OS is Debian, so the README's Qt 6 + Xerces-C requirements apply).
+- **Chosen:** new app `src/app/guider/` (program name: **guider**) added to `src/app/app.pro` SUBDIRS; same repo, same qmake build, built natively on the Pi (Raspberry Pi OS is Debian, so the README's Qt 6 + Xerces-C requirements apply).
 
 ## Structure
-1. **Share code.** Move `pattern_loader.*` (and what it needs from `core/`) into a static lib, e.g. `src/libs/stitchload/`, used by editor and guide. `stitchcore` stays GUI-free. Guide links only the libs it needs; drop multimedia/network/printsupport from its `QT +=`.
+1. **Share code.** Move `pattern_loader.*` (and what it needs from `core/`) into a static lib, e.g. `src/libs/stitchload/` (done in phase 1: also holds Application2D, HeadlessWindow, VPattern), used by editor and guide. `stitchcore` stays GUI-free. Guide links only the libs it needs; drop multimedia/network/printsupport from its `QT +=`.
 2. **Input:** touch-friendly open dialog (large, non-native `QFileDialog` or own list of recent files) for `.stitchly` (preferred, carries bands/patterns/method) and `.sm2d`. Also a CLI path argument so autostart can open the last file. Remember last file and row (QSettings).
    - Optional later: the editor exports a precomputed guide file (JSON of pieces + steps) so the Pi needs no Seamly parser at all. Not needed for v1.
 3. **Model:** extend `stitchcore/instructions.*` to also return structured steps `{firstRow, lastRow, text}` (keep `writeInstructions` as a wrapper so CLI/tests stay valid). Guide maps current row → step.
@@ -29,10 +29,13 @@ Goal: a program that shows an open dialog for a pattern, then shows its instruct
 4. Row counter interface + GPIO and USB sources (needs hardware details).
 5. Pi packaging: build notes, autologin/autostart, kiosk behavior.
 
+## Decisions
+- Program name: **guider**.
+- Target: Raspberry Pi 400 (Pi 4 class, libgpiod fine), X11 (`QT_QPA_PLATFORM=xcb`; autostart via the X11 desktop session / systemd user service), Full HD for now.
+- Layout must be screen independent: no fixed pixel sizes; derive font and touch-target sizes from the screen's logical DPI / height (e.g. a base unit = height/40), use layouts, test at several sizes (offscreen test at 800x480, 1920x1080, portrait).
+
 ## Open questions (ask before implementing phase 4)
-- Pi model/OS (Pi 4 vs 5, Wayland vs X11), screen resolution.
-- Row counter hardware: GPIO sensor (which pin, pulse per row, one or two directions) and/or USB device (what protocol)?
-- Program name.
+- Row counter hardware: GPIO sensor (which pin, pulse per row, one or two directions) and/or USB device (what protocol)? (Pi 400 exposes the 40-pin header.)
 
 ## Verification
 - `cd build && qmake6 ../Stitchly2D.pro && make -j8` builds both apps; `src/test` still pass.

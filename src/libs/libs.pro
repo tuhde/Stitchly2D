@@ -16,4 +16,5 @@ SUBDIRS = \
     fervor \
     tools \
     vmcp \
-    stitchcore
+    stitchcore \
+    stitchload

@@ -32,7 +32,7 @@
 #include <QLoggingCategory>
 #include <QWidget>
 
-#include "../../../app/stitchly2d/core/application_2d.h"
+#include "../../stitchload/core/application_2d.h"
 #include "image_item.h"
 #include "../vpropertyexplorer/checkablemessagebox.h"
 

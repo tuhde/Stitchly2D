@@ -36,7 +36,7 @@
 #include "stitch_tools.h"
 #include "../../libs/vmcp/mcprouter.h"
 #include "../../libs/vmcp/mcpserver.h"
-#include "../core/application_2d.h"
+#include "../stitchload/core/application_2d.h"
 #include "../../libs/vmisc/vsettings.h"
 
 namespace

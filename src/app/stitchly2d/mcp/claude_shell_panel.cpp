@@ -47,7 +47,7 @@
 #include <qtermwidget.h>
 
 #include "mcp_integration.h"
-#include "../core/application_2d.h"
+#include "../stitchload/core/application_2d.h"
 #include "../../libs/vmisc/vsettings.h"
 
 //---------------------------------------------------------------------------------------------------------------------

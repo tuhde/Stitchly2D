@@ -6,10 +6,10 @@
 #include <QTextStream>
 #include <QTimer>
 
-#include "core/application_2d.h"
+#include "../stitchload/core/application_2d.h"
 #include "core/cli.h"
 #include "mainwindow.h"
-#include "core/pattern_loader.h"
+#include "../stitchload/core/pattern_loader.h"
 
 
 int main(int argc, char *argv[])

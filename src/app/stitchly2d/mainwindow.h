@@ -9,7 +9,7 @@
 #include <QMainWindow>
 #include <QStringList>
 
-#include "core/pattern_loader.h"
+#include "../stitchload/core/pattern_loader.h"
 #include "../../libs/stitchcore/catalog.h"
 #include "../../libs/stitchcore/project.h"
 #include "../../libs/stitchcore/shaping.h"

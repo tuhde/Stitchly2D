@@ -27,7 +27,7 @@
 #include "../../app/stitchly2d/mcp/mcp_integration.h"
 #include "../../libs/vmcp/mcptoolregistry.h"
 #include "../../app/stitchly2d/catalog_dialog.h"
-#include "../../app/stitchly2d/core/application_2d.h"
+#include "../../libs/stitchload/core/application_2d.h"
 #include "../../app/stitchly2d/mainwindow.h"
 
 using namespace stitchcore;

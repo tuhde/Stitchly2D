@@ -39,7 +39,7 @@
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
-#include "core/application_2d.h"
+#include "../stitchload/core/application_2d.h"
 #include "core/cli.h"
 #include "mcp/mcp_integration.h"
 #include "mcp/mcp_panel.h"
