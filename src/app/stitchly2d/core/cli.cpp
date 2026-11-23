@@ -62,7 +62,7 @@ int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
     const bool hasForcedMethod = !options.method.isEmpty();
     if (hasForcedMethod && !knitMethodFromName(options.method, forcedMethod))
     {
-        err << QCoreApplication::translate("Cli", "--method must be flat, round, circular_machine or double_bed_machine.") << "\n";
+        err << QCoreApplication::translate("Cli", "--method must be flat, round, circular_machine, double_bed_machine or double_bed_flat.") << "\n";
         return 2;
     }
     if (options.needles >= 0) settings.shaping.machineNeedles = options.needles;

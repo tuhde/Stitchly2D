@@ -52,8 +52,9 @@ int main(int argc, char *argv[])
         QCoreApplication::translate("main", "Internal pull resistor: up (default), down or none."), QStringLiteral("pull"));
     QCommandLineOption debounceOption(QStringLiteral("gpio-debounce"),
         QCoreApplication::translate("main", "Ignore changes shorter than this many ms (default 5, 0 = off)."), QStringLiteral("ms"));
-    QCommandLineOption pulsesOption(QStringLiteral("pulses-per-row"),
-        QCoreApplication::translate("main", "Sensor pulses that make one row (default 1)."), QStringLiteral("n"));
+    QCommandLineOption pulsesOption({QStringLiteral("pulses-per-pass"), QStringLiteral("pulses-per-row")},    // the old name still works
+        QCoreApplication::translate("main", "Sensor pulses that make one carriage pass (default 1). The guide knows how many passes make a row."),
+        QStringLiteral("n"));
     QCommandLineOption simOption(QStringLiteral("sim-period"),
         QCoreApplication::translate("main", "Simulated counter: one pulse every this many ms (default 1000, 0 = never)."), QStringLiteral("ms"));
     parser.addOptions({windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
@@ -78,7 +79,7 @@ int main(int argc, char *argv[])
     take(edgeOption, [&](const QString &v) { counter.edge = v; });
     take(pullOption, [&](const QString &v) { counter.pull = v; });
     take(debounceOption, [&](const QString &v) { counter.debounceMs = v.toInt(); });
-    take(pulsesOption, [&](const QString &v) { counter.pulsesPerRow = v.toInt(); });
+    take(pulsesOption, [&](const QString &v) { counter.pulsesPerPass = v.toInt(); });
     take(simOption, [&](const QString &v) { counter.simulatedPeriodMs = v.toInt(); });
     if (counterChanged)
     {

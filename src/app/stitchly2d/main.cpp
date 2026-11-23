@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
                                      QCoreApplication::translate("main", "With --cli: shape the edges on \"outside\" rows only (default) or on \"every\" row."),
                                      QStringLiteral("rows"));
     QCommandLineOption methodOption(QStringLiteral("method"),
-                                    QCoreApplication::translate("main", "With --cli: knit all pieces flat, round, circular_machine or double_bed_machine."),
+                                    QCoreApplication::translate("main", "With --cli: knit all pieces flat, round, circular_machine, double_bed_machine or double_bed_flat."),
                                     QStringLiteral("method"));
     QCommandLineOption needlesOption(QStringLiteral("needles"),
                                      QCoreApplication::translate("main", "With --cli: needles of the circular machine, or per bed of the double-bed machine."),

@@ -172,8 +172,42 @@ void GuideWindow::setPiece(int piece)
         saveState();
     }
     m_piece = piece;
+    m_pass = 0;
     const KnitPiece &p = m_job.pieces.at(piece);
     m_row = qBound(0, settings().value(rowKey(m_job.input, p.name), 0).toInt(), p.rowCount + 1);
+    saveState();
+    updateView();
+}
+
+int GuideWindow::passesInRow(int row) const
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size())
+    {
+        return 1;
+    }
+    const auto &passes = m_job.pieces.at(m_piece).rowPasses;
+    return row >= 0 && row < passes.size() ? qMax(1, passes.at(row).count()) : 1;
+}
+
+void GuideWindow::stepPasses(int delta)
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size())
+    {
+        return;      // nothing open
+    }
+    // The row shown is the one being knitted: after the last pass of a row the next row starts at its first pass.
+    for (; delta > 0; --delta)
+    {
+        if (m_pass + 1 < passesInRow(m_row))      ++m_pass;
+        else if (m_row <= rowCount())             { ++m_row; m_pass = 0; }
+        else break;                                // after the last row: nothing more to count
+    }
+    for (; delta < 0; ++delta)
+    {
+        if (m_pass > 0)                           --m_pass;
+        else if (m_row > 0)                       { --m_row; m_pass = passesInRow(m_row) - 1; }
+        else break;
+    }
     saveState();
     updateView();
 }
@@ -185,8 +219,14 @@ void GuideWindow::setRow(int row)
         return;      // nothing open
     }
     row = qBound(0, row, rowCount() + 1);
+    m_pass = 0;                                   // a row set by hand starts at its first pass ...
+    if (m_counter)
+    {
+        m_counter->resetPending();                // ... and sensor pulses counted before do not belong to it
+    }
     if (row == m_row)
     {
+        updateView();
         return;
     }
     m_row = row;
@@ -248,7 +288,11 @@ void GuideWindow::updateView()
     }
     const KnitPiece &p = m_job.pieces.at(m_piece);
     m_title->setText(p.name);
-    m_rowLabel->setText(rowText());
+    // [passes] Row 16 / 200, the pass the machine is at marked
+    const stitchcore::RowPasses &passes = m_row < p.rowPasses.size() ? p.rowPasses.at(m_row) : stitchcore::RowPasses();
+    const QString passText = stitchcore::passesText(passes, qMin(m_pass, passes.count() - 1), true);
+    m_rowLabel->setTextFormat(Qt::RichText);
+    m_rowLabel->setText((passText.isEmpty() ? QString() : QStringLiteral("[%1]&nbsp;&nbsp;").arg(passText)) + rowText().toHtmlEscaped());
     QStringList texts;
     for (const stitchcore::InstructionStep &s : p.steps) texts << s.text;
     if (m_view->property("piece").toInt() != m_piece + 1 || m_view->property("file").toString() != m_job.input)
@@ -423,7 +467,7 @@ void GuideWindow::setRowCounter(RowCounterSource *counter)
         m_counterLabel->setText(error ? message : (state == RowCounterSource::State::Running ? m_counter->description() : tr("counter stopped")));
         m_counterLabel->setToolTip(message);
     };
-    connect(counter, &RowCounterSource::rowsStepped, this, [this](int delta) { setRow(m_row + delta); });
+    connect(counter, &RowCounterSource::passStepped, this, &GuideWindow::stepPasses);
     connect(counter, &RowCounterSource::stateChanged, this, showState);
     showState(counter->state(), counter->message());
 }

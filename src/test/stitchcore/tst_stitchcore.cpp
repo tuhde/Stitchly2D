@@ -10,6 +10,7 @@
 #include "project.h"
 #include "shaping.h"
 #include "instructions.h"
+#include "passes.h"
 
 using namespace stitchcore;
 
@@ -65,6 +66,10 @@ private slots:
     void methodRound();
     void methodCircularMachine();
     void methodDoubleBedMachine();
+    void methodDoubleBedFlat();
+    void passesPlainRows();
+    void passesColourRows();
+    void passesTextForTheCounter();
     void methodsInProjects();
     void translationsComplete();
     void instructionsTranslatable();
@@ -1103,7 +1108,7 @@ void TstStitchCore::shapeOnInProjects()
 
 void TstStitchCore::methodNames()
 {
-    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine})
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine, KnitMethod::DoubleBedFlat})
     {
         KnitMethod back = KnitMethod::Flat;
         QVERIFY(knitMethodFromName(knitMethodName(m), back));
@@ -1115,6 +1120,7 @@ void TstStitchCore::methodNames()
     QVERIFY(!isRound(KnitMethod::Flat));
     QVERIFY(isRound(KnitMethod::Round) && !isMachine(KnitMethod::Round));
     QVERIFY(isMachine(KnitMethod::CircularMachine) && isMachine(KnitMethod::DoubleBedMachine));
+    QVERIFY(isMachine(KnitMethod::DoubleBedFlat) && !isRound(KnitMethod::DoubleBedFlat));   // a machine, but back and forth
     ShapingOptions o;
     QVERIFY(o.method == KnitMethod::Flat);
     QVERIFY(o.effectiveShapeOn() == ShapingRows::OutsideRows);
@@ -1199,6 +1205,148 @@ void TstStitchCore::methodCircularMachine()
     o.method = KnitMethod::Round;
     o.machineNeedles = 10;
     QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));
+}
+
+void TstStitchCore::methodDoubleBedFlat()
+{
+    ShapingOptions o;
+    o.method = KnitMethod::DoubleBedFlat;
+    QVERIFY(o.effectiveShapeOn() == ShapingRows::OutsideRows);          // outside and inside rows, like flat
+    const StitchSize size{5.0, 5.0};
+    const StitchGrid odd = StitchGrid::build(QPolygonF({{0, 0}, {105, 0}, {105, 100}, {0, 100}}), size);
+    QStringList lines = writeInstructions(odd, o);
+    QVERIFY2(lines.first().contains("Put 21 needles in work on both beds and cast on. Knit back and forth."), qPrintable(lines.join('\n')));
+    QVERIFY(lines.last().startsWith("Take the work off both beds: bind off 21 stitches"));
+    // edges, not the beginning and end of a round; the needles are the same on both beds
+    const StitchGrid ledge = StitchGrid::build(QPolygonF({{0, 0}, {100, 0}, {100, 100}, {125, 100}, {125, 200}, {0, 200}}), size);
+    QString text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("bring 5 needle(s) into work on both beds at right edge"), qPrintable(text));
+    QVERIFY(!text.contains("round"));
+    QVERIFY(text.contains("Row 1 is an outside row") || !text.contains("increase"));
+    const StitchGrid narrowing = StitchGrid::build(QPolygonF({{0, 0}, {125, 0}, {125, 100}, {100, 100}, {100, 200}, {0, 200}}), size);
+    text = writeInstructions(narrowing, o).join('\n');
+    QVERIFY2(text.contains("transfer 5 stitch(es) to the neighbouring needle(s) on both beds and take the empty needle(s) out of work at right edge"),
+             qPrintable(text));
+    o.machineNeedles = 24;                                              // 25 stitches at the widest: 25 needles per bed
+    text = writeInstructions(ledge, o).join('\n');
+    QVERIFY2(text.contains("Warning: the piece needs 25 needles per bed, the machine has 24."), qPrintable(text));
+    o.machineNeedles = 25;
+    QVERIFY(!writeInstructions(ledge, o).join('\n').contains("Warning"));
+    // saved in projects by name
+    QCOMPARE(knitMethodName(KnitMethod::DoubleBedFlat), QString("double_bed_flat"));
+}
+
+namespace
+{
+StitchGrid colourGrid(const QString &pattern, int widthMm = 50, int heightMm = 35)
+{
+    StitchCatalog cat = StitchCatalog::withDefaults();
+    PatternDef three;
+    three.name = QStringLiteral("Three"); three.kind = PatternDef::Color; three.width = 3; three.height = 1;
+    three.legend = {"A", "B", "C"}; three.cells = {0, 1, 2};
+    cat.set(three);
+    PatternDef half;
+    half.name = QStringLiteral("Half"); half.kind = PatternDef::Color; half.width = 2; half.height = 1;
+    half.legend = {"A"}; half.cells = {0, -1};                       // second stitch keeps the base yarn
+    cat.set(half);
+    BandSpec band; band.stitchType = "Stockinette";
+    if (!pattern.isEmpty()) band.overlays.append(Overlay{pattern});
+    return StitchGrid::build(QPolygonF({{0, 0}, {double(widthMm), 0}, {double(widthMm), double(heightMm)}, {0, double(heightMm)}}),
+                             {band}, cat);
+}
+}
+
+void TstStitchCore::passesPlainRows()
+{
+    const StitchGrid plain = colourGrid(QString());
+    QVERIFY(plain.rowCount() > 2);
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedFlat})
+    {
+        const RowPasses p = passesForRow(plain, m, 1);
+        QCOMPARE(p.count(), 1);
+        QVERIFY(p.yarns.isEmpty());
+        QCOMPARE(passesText(p), QString());                       // nothing to show for a single plain pass
+    }
+    // tubular double-bed: front, then rear
+    const RowPasses tube = passesForRow(plain, KnitMethod::DoubleBedMachine, 1);
+    QCOMPARE(tube.count(), 2);
+    QVERIFY(tube.passes.at(0).bed == Bed::Front && tube.passes.at(1).bed == Bed::Rear);
+    QCOMPARE(passesText(tube), QString("front/rear"));
+    // outside the piece: a single pass, no crash
+    QCOMPARE(passesForRow(plain, KnitMethod::DoubleBedMachine, -1).count(), 1);
+    QCOMPARE(passesForRow(plain, KnitMethod::DoubleBedMachine, 9999).count(), 1);
+    QCOMPARE(passesForRow(StitchGrid(), KnitMethod::DoubleBedFlat, 0).count(), 1);
+}
+
+void TstStitchCore::passesColourRows()
+{
+    // Checks 2x2: two colours in every row
+    const StitchGrid checks = colourGrid(QStringLiteral("Checks 2x2"));
+    RowPasses p = passesForRow(checks, KnitMethod::DoubleBedFlat, 0);
+    QCOMPARE(p.yarns, QStringList({"A", "B"}));
+    QCOMPARE(p.count(), 2);                                       // one pass per colour on the flat double-bed
+    QCOMPARE(p.passes.at(0).yarn, QString("A"));
+    QCOMPARE(p.passes.at(1).yarn, QString("B"));
+    QVERIFY(p.passes.at(0).bed == Bed::None);
+    p = passesForRow(checks, KnitMethod::DoubleBedMachine, 0);
+    QCOMPARE(p.count(), 4);                                       // colours x beds on the tubular double-bed
+    QCOMPARE(p.passes.at(0).yarn, QString("A")); QVERIFY(p.passes.at(0).bed == Bed::Front);
+    QCOMPARE(p.passes.at(1).yarn, QString("A")); QVERIFY(p.passes.at(1).bed == Bed::Rear);
+    QCOMPARE(p.passes.at(2).yarn, QString("B")); QVERIFY(p.passes.at(2).bed == Bed::Front);
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine})
+    {
+        p = passesForRow(checks, m, 0);
+        QCOMPARE(p.count(), 1);                                   // other methods: the colours are worked within one pass
+        QCOMPARE(p.yarns, QStringList({"A", "B"}));               // but they are still named
+    }
+    // Stripes: one colour per row, which changes with the rows
+    const StitchGrid stripes = colourGrid(QStringLiteral("Stripes 2 rows"));
+    QCOMPARE(passesForRow(stripes, KnitMethod::DoubleBedFlat, 0).yarns, QStringList({"A"}));
+    QCOMPARE(passesForRow(stripes, KnitMethod::DoubleBedFlat, 2).yarns, QStringList({"B"}));
+    QCOMPARE(passesForRow(stripes, KnitMethod::DoubleBedFlat, 0).count(), 1);
+    QCOMPARE(passesForRow(stripes, KnitMethod::DoubleBedMachine, 0).count(), 2);
+    // Three colours
+    const StitchGrid three = colourGrid(QStringLiteral("Three"));
+    QCOMPARE(passesForRow(three, KnitMethod::DoubleBedFlat, 3).count(), 3);
+    QCOMPARE(passesForRow(three, KnitMethod::DoubleBedMachine, 3).count(), 6);
+    // Stitches without a colour use the base yarn, which is a second yarn in that row
+    const StitchGrid half = colourGrid(QStringLiteral("Half"));
+    p = passesForRow(half, KnitMethod::DoubleBedFlat, 0);
+    QCOMPARE(p.yarns.size(), 2);
+    QCOMPARE(p.yarns.first(), QString("main"));                   // the base yarn comes first, then the colours
+    QCOMPARE(p.yarns.last(), QString("A"));
+    QCOMPARE(p.count(), 2);
+    // The order of the yarns is the same in every row, although the pattern puts them in another place
+    // (Checks 2x2 starts with A in rows 1-2 and with B in rows 3-4)
+    for (int row = 0; row < 8; ++row)
+        QCOMPARE(passesForRow(checks, KnitMethod::DoubleBedFlat, row).yarns, QStringList({"A", "B"}));
+}
+
+void TstStitchCore::passesTextForTheCounter()
+{
+    const StitchGrid checks = colourGrid(QStringLiteral("Checks 2x2"));
+    // [red,green]
+    RowPasses flat = passesForRow(checks, KnitMethod::DoubleBedFlat, 0);
+    QCOMPARE(passesText(flat), QString("A,B"));
+    QCOMPARE(passesText(flat, 1, true), QString("A,<b><u>B</u></b>"));       // the second pass is the current one
+    QCOMPARE(passesText(flat, 0, false), QString("A,B"));                    // plain text: no markup
+    // [front/rear]
+    const RowPasses tube = passesForRow(colourGrid(QString()), KnitMethod::DoubleBedMachine, 0);
+    QCOMPARE(passesText(tube), QString("front/rear"));
+    QCOMPARE(passesText(tube, 0, true), QString("<b><u>front</u></b>/rear"));
+    QCOMPARE(passesText(tube, 1, true), QString("front/<b><u>rear</u></b>"));
+    // both: colours with their beds
+    const RowPasses both = passesForRow(checks, KnitMethod::DoubleBedMachine, 0);
+    QCOMPARE(passesText(both), QString("A front/rear,B front/rear"));
+    QCOMPARE(passesText(both, 3, true), QString("A front/rear,B front/<b><u>rear</u></b>"));
+    // one pass: just the yarns
+    const RowPasses single = passesForRow(checks, KnitMethod::Flat, 0);
+    QCOMPARE(passesText(single), QString("A,B"));
+    // markup is escaped
+    RowPasses odd;
+    odd.yarns = {"<red>"};
+    odd.passes = {{"<red>", Bed::None}, {"b&w", Bed::None}};
+    QCOMPARE(passesText(odd, 0, true), QString("<b><u>&lt;red&gt;</u></b>,b&amp;w"));
 }
 
 void TstStitchCore::methodDoubleBedMachine()

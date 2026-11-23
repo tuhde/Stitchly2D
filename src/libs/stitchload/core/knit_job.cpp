@@ -91,6 +91,11 @@ bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
         out.castOn = grid.castOn();
         out.bindOff = grid.bindOff();
         out.steps = writeInstructionSteps(grid, shaping);
+        out.rowPasses.resize(grid.rowCount() + 2);                    // cast on and bind off are one pass each
+        for (int row = 1; row <= grid.rowCount(); ++row)
+        {
+            out.rowPasses[row] = passesForRow(grid, shaping.method, row - 1);
+        }
         job.pieces << out;
     }
     return true;

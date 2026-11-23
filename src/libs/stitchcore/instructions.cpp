@@ -92,7 +92,7 @@ bool isBulk(int change, const ShapingOptions &o)
 QString whereText(const QString &side, KnitMethod m)
 {
     const bool left = side == QLatin1String("left");
-    if (m == KnitMethod::Flat)
+    if (!isRound(m))
     {
         return left ? Instructions::tr("left edge") : Instructions::tr("right edge");
     }
@@ -135,6 +135,14 @@ QString edge(const QString &side, int change, const ShapingOptions &o)
             }
             return Instructions::tr("transfer %1 stitch(es) to the neighbouring needle(s) and take the empty needle(s) "
                                     "out of work at %2").arg(n).arg(where);
+
+        case KnitMethod::DoubleBedFlat:
+            if (change > 0)
+            {
+                return Instructions::tr("bring %1 needle(s) into work on both beds at %2").arg(n).arg(where);
+            }
+            return Instructions::tr("transfer %1 stitch(es) to the neighbouring needle(s) on both beds and take the empty "
+                                    "needle(s) out of work at %2").arg(n).arg(where);
 
         case KnitMethod::DoubleBedMachine:
         {
@@ -225,6 +233,10 @@ QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const Sha
             lines << Instructions::tr("Put %1 needles in work and cast on%2. Knit in rounds.").arg(castOn)
                          .arg(multi ? Instructions::tr(" (work in %1)").arg(startType) : QString());
             break;
+        case KnitMethod::DoubleBedFlat:
+            lines << Instructions::tr("Put %1 needles in work on both beds and cast on%2. Knit back and forth.").arg(castOn)
+                         .arg(multi ? Instructions::tr(" (work in %1)").arg(startType) : QString());
+            break;
         case KnitMethod::DoubleBedMachine:
             lines << Instructions::tr("Cast on %1 stitches tubular: %2 needles on the front bed and %3 on the back bed%4. "
                                       "One round is two carriage passes: front bed, then back bed.")
@@ -237,18 +249,18 @@ QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const Sha
     {
         int widest = 0;
         for (int c : plannedCounts(grid, options.effectiveShapeOn())) widest = qMax(widest, c);
-        const int needed = options.method == KnitMethod::DoubleBedMachine ? (widest + 1) / 2 : widest;
+        const int needed = options.method == KnitMethod::DoubleBedMachine ? (widest + 1) / 2 : widest;   // flat: the same needles on both beds
         if (needed > options.machineNeedles)
         {
             lines << Instructions::tr("Warning: the piece needs %1 needles%2, the machine has %3.")
-                         .arg(needed).arg(options.method == KnitMethod::DoubleBedMachine ? Instructions::tr(" per bed") : QString())
+                         .arg(needed).arg(options.method == KnitMethod::DoubleBedMachine || options.method == KnitMethod::DoubleBedFlat ? Instructions::tr(" per bed") : QString())
                          .arg(options.machineNeedles);
         }
     }
     const QVector<Segment> segments = planSegments(grid, options.effectiveShapeOn());
     bool anyShaping = false;
     for (const Segment &t : segments) anyShaping = anyShaping || (t.shaped && !t.shaping.bandChange);
-    if (anyShaping && options.method == KnitMethod::Flat && options.shapeOn == ShapingRows::OutsideRows)
+    if (anyShaping && !isRound(options.method) && options.shapeOn == ShapingRows::OutsideRows)
     {
         lines << Instructions::tr("Row 1 is an outside row. Increases and decreases are worked on outside rows only.");
     }
@@ -372,6 +384,7 @@ QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const Sha
             lines << Instructions::tr("Take the work off the machine: bind off %1 stitches.").arg(grid.bindOff());
             break;
         case KnitMethod::DoubleBedMachine:
+        case KnitMethod::DoubleBedFlat:
             lines << Instructions::tr("Take the work off both beds: bind off %1 stitches.").arg(grid.bindOff());
             break;
         default:

@@ -8,22 +8,22 @@
 class QSettings;
 
 /**
- * Turns sensor pulses into rows: every `pulsesPerRow` pulses make one row. A pulse in the other direction takes
- * back what is pending first, so a carriage that turns round half way does not lose or gain a row.
+ * Turns sensor pulses into carriage passes: every `pulsesPerPass` pulses make one pass. A pulse in the other
+ * direction takes back what is pending first, so a carriage that turns round half way does not lose or gain a pass.
  */
 class PulseCounter
 {
 public:
-    explicit PulseCounter(int pulsesPerRow = 1) { setPulsesPerRow(pulsesPerRow); }
+    explicit PulseCounter(int pulsesPerPass = 1) { setPulsesPerRow(pulsesPerPass); }
     void setPulsesPerRow(int n) { m_perRow = n < 1 ? 1 : n; }
-    int  pulsesPerRow() const { return m_perRow; }
-    /** Adds pulses (negative = backwards); returns how many whole rows that completed (negative = back). */
+    int  pulsesPerPass() const { return m_perRow; }
+    /** Adds pulses (negative = backwards); returns how many whole passes that completed (negative = back). */
     int  add(int pulses = 1)
     {
         m_pending += pulses;
-        const int rows = m_pending / m_perRow;
-        m_pending -= rows * m_perRow;
-        return rows;
+        const int passes = m_pending / m_perRow;
+        m_pending -= passes * m_perRow;
+        return passes;
     }
     int  pending() const { return m_pending; }
     void reset() { m_pending = 0; }
@@ -34,9 +34,10 @@ private:
 };
 
 /**
- * Where row changes come from besides the touch buttons: a sensor on the machine. A source only says how many rows
- * the work moved (+1 forward, -1 back); the guide applies it to its current row, so the user can always correct
- * the row by hand.
+ * Where row changes come from besides the touch buttons: a sensor on the machine. A source only says that the
+ * carriage made a pass (+1 forward, -1 back). How many passes make a row depends on the piece and the row (two on
+ * a tubular double-bed machine, one per colour in colour rows), so the guide decides when a row is done and the
+ * user can always correct the row by hand.
  */
 class RowCounterSource : public QObject
 {
@@ -45,7 +46,7 @@ public:
     enum class State { Stopped, Running, Error };
     Q_ENUM(State)
 
-    explicit RowCounterSource(int pulsesPerRow = 1, QObject *parent = nullptr);
+    explicit RowCounterSource(int pulsesPerPass = 1, QObject *parent = nullptr);
 
     /** Starts listening. Returns false (and the state becomes Error) with the reason in error. */
     virtual bool    start(QString *error = nullptr) = 0;
@@ -55,15 +56,17 @@ public:
 
     State           state() const { return m_state; }
     QString         message() const { return m_message; }
-    int             pulsesPerRow() const { return m_pulses.pulsesPerRow(); }
+    int             pulsesPerPass() const { return m_pulses.pulsesPerPass(); }
+    /** Forgets sensor pulses that did not make a whole pass yet (after the row was changed by hand). */
+    void            resetPending() { m_pulses.reset(); }
 
 signals:
-    void rowsStepped(int delta);                        //!< rows moved, never 0
+    void passStepped(int delta);                        //!< carriage passes counted (+1 forward, -1 back), after pulsesPerPass
     void pulseCounted();                                //!< every sensor pulse (also those that do not complete a row)
     void stateChanged(RowCounterSource::State state, const QString &message);
 
 protected:
-    /** Call for every sensor pulse; emits rowsStepped() when a row is complete. */
+    /** Call for every sensor pulse; emits passStepped() when a pass is complete. */
     void pulse(int direction = 1);
     void setState(State state, const QString &message = QString());
 
@@ -83,7 +86,7 @@ struct RowCounterConfig
     QString edge = QStringLiteral("falling");       //!< "rising", "falling" or "both": which edge is one pulse
     QString pull = QStringLiteral("up");            //!< "up", "down" or "none": internal pull resistor
     int     debounceMs = 5;                         //!< ignore changes shorter than this; 0 = off
-    int     pulsesPerRow = 1;
+    int     pulsesPerPass = 1;                      //!< sensor pulses that make one carriage pass
     // Simulated
     int     simulatedPeriodMs = 1000;               //!< one pulse every ... ms; 0 = only when told to
 

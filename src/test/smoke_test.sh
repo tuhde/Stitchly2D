@@ -48,6 +48,9 @@ echo "$flat" | grep -q "^Cast on" || fail "flat instructions missing"
 machine=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece Cuff --method double_bed_machine --needles 20 2>/dev/null)
 echo "$machine" | grep -q "tubular: 29 needles on the front bed and 29 on the back bed" || fail "double-bed cast-on missing"
 echo "$machine" | grep -q "Warning: the piece needs 29 needles per bed, the machine has 20" || fail "needle warning missing"
+flatbed=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece Cuff --method double_bed_flat --needles 20 2>/dev/null)
+echo "$flatbed" | grep -q "Put 58 needles in work on both beds and cast on" || fail "double-bed flat cast-on missing"
+echo "$flatbed" | grep -q "Warning: the piece needs 58 needles per bed, the machine has 20" || fail "double-bed flat needle warning missing"
 circ=$("$BIN" --cli "$DATA/patterns/male_shirt.sm2d" --piece Cuff --method circular_machine --needles 58 2>/dev/null)
 echo "$circ" | grep -q "Put 58 needles in work" || fail "circular machine cast-on missing"
 echo "$circ" | grep -q "Warning" && fail "58 needles are enough for 58 stitches"

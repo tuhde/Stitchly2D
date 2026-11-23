@@ -1,7 +1,7 @@
 #include "simulated_row_counter.h"
 
-SimulatedRowCounter::SimulatedRowCounter(int periodMs, int pulsesPerRow, QObject *parent)
-    : RowCounterSource(pulsesPerRow, parent)
+SimulatedRowCounter::SimulatedRowCounter(int periodMs, int pulsesPerPass, QObject *parent)
+    : RowCounterSource(pulsesPerPass, parent)
 {
     m_timer.setInterval(qMax(1, periodMs));
     m_automatic = periodMs > 0;

@@ -6,6 +6,7 @@
 #include <QVector>
 
 #include "../../stitchcore/instructions.h"
+#include "../../stitchcore/passes.h"
 #include "../../stitchcore/shaping.h"
 
 /** Where the user's catalog (catalog.json) is kept. */
@@ -20,6 +21,8 @@ struct KnitPiece
     int                                       bindOff = 0;
     stitchcore::KnitMethod                    method = stitchcore::KnitMethod::Flat;
     QVector<stitchcore::InstructionStep>      steps;
+    /** What the machine does for each row, indexed like the instruction rows: 0 = cast on, 1..rowCount, rowCount + 1 = bind off. */
+    QVector<stitchcore::RowPasses>            rowPasses;
 };
 
 struct KnitJob

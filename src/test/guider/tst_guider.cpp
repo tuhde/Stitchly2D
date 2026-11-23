@@ -17,6 +17,7 @@
 #include "../../app/guider/row_counter.h"
 #include "../../app/guider/simulated_row_counter.h"
 #include "../../app/guider/step_view.h"
+#include "../../libs/stitchcore/project.h"
 #include "../../libs/stitchload/core/application_2d.h"
 
 #undef qApp
@@ -27,6 +28,25 @@ using namespace stitchcore;
 namespace
 {
 QString shirt() { return QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"); }
+
+/** A project on the sample shirt: every piece knitted this way, and BackPanel with this pattern laid over it. */
+QString projectFile(const QTemporaryDir &dir, stitchcore::KnitMethod method, const QString &pattern = QString())
+{
+    using namespace stitchcore;
+    Project project;
+    project.patternFile = shirt();
+    project.settings.size = StitchSize{5.0, 3.5};
+    project.settings.shaping.method = method;
+    BandSpec band;
+    band.stitchType = QString::fromLatin1(kDefaultStitchName);
+    if (!pattern.isEmpty()) band.overlays.append(Overlay{pattern});
+    project.bands.insert(QStringLiteral("BackPanel"), {band});
+    project.catalog = usedCatalog(StitchCatalog::withDefaults(), project.bands);
+    const QString path = dir.path() + QStringLiteral("/test_%1.stitchly").arg(int(method));
+    QString error;
+    if (!saveProject(path, project, &error)) qWarning() << error;
+    return path;
+}
 }
 
 class TstGuider : public QObject
@@ -66,6 +86,10 @@ private slots:
     void buttonsStandOutInEveryTheme_data();
     void buttonsStandOutInEveryTheme();
     void settingsDialogChoosesTheme();
+    void tubularRowTakesTwoPasses();
+    void colourRowsTakeOnePassPerColour();
+    void handMovesRestartThePass();
+    void rowLabelShowsThePasses();
     void looksOfDialogs();
 };
 
@@ -307,7 +331,7 @@ void TstGuider::pulsesBecomeRows()
     QCOMPARE(c.add(7), 2);                 // 7 pulses = 2 rows and 1 left over
     QCOMPARE(c.pending(), 1);
     PulseCounter one(0);                   // nonsense is treated as 1
-    QCOMPARE(one.pulsesPerRow(), 1);
+    QCOMPARE(one.pulsesPerPass(), 1);
     QCOMPARE(one.add(), 1);
 }
 
@@ -343,7 +367,7 @@ void TstGuider::configIsChecked()
 {
     QFETCH(QString, kind); QFETCH(int, line); QFETCH(QString, edge); QFETCH(int, pulses); QFETCH(bool, valid);
     RowCounterConfig c;
-    c.kind = kind; c.line = line; c.edge = edge; c.pulsesPerRow = pulses;
+    c.kind = kind; c.line = line; c.edge = edge; c.pulsesPerPass = pulses;
     QCOMPARE(c.problem().isEmpty(), valid);
     QString error;
     RowCounterSource *source = createRowCounter(c, &error);
@@ -356,7 +380,7 @@ void TstGuider::configIsSaved()
 {
     RowCounterConfig c;
     c.kind = QStringLiteral("gpio"); c.chip = QStringLiteral("gpiochip4"); c.line = 23; c.edge = QStringLiteral("both");
-    c.pull = QStringLiteral("down"); c.debounceMs = 12; c.pulsesPerRow = 6;
+    c.pull = QStringLiteral("down"); c.debounceMs = 12; c.pulsesPerPass = 6;
     QSettings s(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));
     c.save(s);
     RowCounterConfig back;
@@ -367,7 +391,7 @@ void TstGuider::configIsSaved()
     QCOMPARE(back.edge, c.edge);
     QCOMPARE(back.pull, c.pull);
     QCOMPARE(back.debounceMs, 12);
-    QCOMPARE(back.pulsesPerRow, 6);
+    QCOMPARE(back.pulsesPerPass, 6);
     RowCounterConfig fresh;
     s.clear();
     fresh.load(s);
@@ -377,7 +401,7 @@ void TstGuider::configIsSaved()
 void TstGuider::simulatedCounterEmitsRows()
 {
     SimulatedRowCounter c(0, 2);
-    QSignalSpy rows(&c, &RowCounterSource::rowsStepped);
+    QSignalSpy rows(&c, &RowCounterSource::passStepped);
     c.injectPulse();                                       // not running yet: ignored
     QVERIFY(c.start());
     QCOMPARE(c.state(), RowCounterSource::State::Running);
@@ -393,7 +417,7 @@ void TstGuider::simulatedCounterEmitsRows()
     QCOMPARE(c.state(), RowCounterSource::State::Stopped);
 
     SimulatedRowCounter timed(5, 1);                       // by itself, every 5 ms
-    QSignalSpy timedRows(&timed, &RowCounterSource::rowsStepped);
+    QSignalSpy timedRows(&timed, &RowCounterSource::passStepped);
     QVERIFY(timed.start());
     QTRY_VERIFY_WITH_TIMEOUT(timedRows.count() >= 3, 2000);
 }
@@ -483,7 +507,7 @@ void TstGuider::settingsDialogRoundTrip()
     RowCounterConfig in;
     in.kind = GpioRowCounter::available() ? QStringLiteral("gpio") : QStringLiteral("simulated");
     in.chip = QStringLiteral("gpiochip4"); in.line = 23; in.edge = QStringLiteral("both"); in.pull = QStringLiteral("down");
-    in.debounceMs = 12; in.pulsesPerRow = 6; in.simulatedPeriodMs = 300;
+    in.debounceMs = 12; in.pulsesPerPass = 6; in.simulatedPeriodMs = 300;
     SettingsDialog dialog(in);
     const RowCounterConfig out = dialog.config();
     QCOMPARE(out.kind, in.kind);
@@ -492,7 +516,7 @@ void TstGuider::settingsDialogRoundTrip()
     QCOMPARE(out.edge, in.edge);
     QCOMPARE(out.pull, in.pull);
     QCOMPARE(out.debounceMs, 12);
-    QCOMPARE(out.pulsesPerRow, 6);
+    QCOMPARE(out.pulsesPerPass, 6);
     QCOMPARE(out.simulatedPeriodMs, 300);
     QVERIFY(out.problem().isEmpty());
     // Defaults of a fresh config give a usable dialog: buttons only, and a GPIO pin is preset
@@ -504,7 +528,7 @@ void TstGuider::settingsDialogRoundTrip()
 void TstGuider::settingsDialogTestCountsPulses()
 {
     RowCounterConfig c;
-    c.kind = QStringLiteral("simulated"); c.simulatedPeriodMs = 5; c.pulsesPerRow = 2;
+    c.kind = QStringLiteral("simulated"); c.simulatedPeriodMs = 5; c.pulsesPerPass = 2;
     SettingsDialog dialog(c);
     dialog.show();
     QPushButton *test = nullptr;
@@ -715,6 +739,138 @@ void TstGuider::settingsDialogChoosesTheme()
     setGuideThemeChoice(ThemeChoice::System);
 }
 
+void TstGuider::tubularRowTakesTwoPasses()
+{
+    QTemporaryDir dir;
+    GuideWindow w;
+    QString error;
+    QVERIFY2(w.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedMachine), &error), qPrintable(error));
+    QCOMPARE(w.job().pieces.at(w.piece()).name, QStringLiteral("BackPanel"));
+    QCOMPARE(w.passesInRow(0), 1);                    // cast on
+    QCOMPARE(w.passesInRow(1), 2);                    // front bed, rear bed
+    QCOMPARE(w.passesInRow(w.rowCount() + 1), 1);     // bind off
+    RowCounterConfig sim;
+    sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0;
+    QVERIFY(w.applyCounterConfig(sim, false));
+    auto *counter = qobject_cast<SimulatedRowCounter *>(w.rowCounter());
+    QVERIFY(counter);
+    auto at = [&](int row, int pass) { return w.row() == row && w.pass() == pass; };
+    QVERIFY(at(0, 0));
+    counter->injectPulse();                           // cast on done
+    QVERIFY2(at(1, 0), qPrintable(QStringLiteral("%1/%2").arg(w.row()).arg(w.pass())));
+    counter->injectPulse();                           // front bed pass
+    QVERIFY(at(1, 1));
+    counter->injectPulse();                           // rear bed pass: the row is finished
+    QVERIFY(at(2, 0));
+    counter->injectPulse(-1);                         // and back, pass by pass
+    QVERIFY(at(1, 1));
+    counter->injectPulse(-1);
+    QVERIFY(at(1, 0));
+    counter->injectPulse(-1);
+    QVERIFY(at(0, 0));
+    counter->injectPulse(-1);                         // nothing before the cast on
+    QVERIFY(at(0, 0));
+    // to the end: 1 + 2 * rows passes get to the bind-off, and no further
+    for (int i = 0; i < 1 + 2 * w.rowCount(); ++i) counter->injectPulse();
+    QVERIFY(at(w.rowCount() + 1, 0));
+    counter->injectPulse();
+    QVERIFY(at(w.rowCount() + 1, 0));
+}
+
+void TstGuider::colourRowsTakeOnePassPerColour()
+{
+    QTemporaryDir dir;
+    {   // flat double-bed, two colours in every row: two passes
+        GuideWindow w;
+        QVERIFY(w.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedFlat, QStringLiteral("Checks 2x2"))));
+        QCOMPARE(w.passesInRow(1), 2);
+        QCOMPARE(w.passesInRow(2), 2);
+        QCOMPARE(w.passesInRow(0), 1);
+    }
+    {   // flat double-bed, plain: one pass
+        GuideWindow w;
+        QVERIFY(w.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedFlat)));
+        QCOMPARE(w.passesInRow(1), 1);
+    }
+    {   // by hand: the colours are worked within one pass
+        GuideWindow w;
+        QVERIFY(w.openFile(projectFile(dir, stitchcore::KnitMethod::Flat, QStringLiteral("Checks 2x2"))));
+        QCOMPARE(w.passesInRow(1), 1);
+    }
+    {   // tubular double-bed with two colours: colours x beds
+        GuideWindow w;
+        QVERIFY(w.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedMachine, QStringLiteral("Checks 2x2"))));
+        QCOMPARE(w.passesInRow(1), 4);
+    }
+}
+
+void TstGuider::handMovesRestartThePass()
+{
+    QTemporaryDir dir;
+    GuideWindow w;
+    QVERIFY(w.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedMachine)));
+    RowCounterConfig sim;
+    sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0; sim.pulsesPerPass = 2;
+    QVERIFY(w.applyCounterConfig(sim, false));
+    auto *counter = qobject_cast<SimulatedRowCounter *>(w.rowCounter());
+    counter->injectPulse(); counter->injectPulse();   // 2 pulses = the cast-on pass
+    QCOMPARE(w.row(), 1);
+    counter->injectPulse(); counter->injectPulse();   // front pass
+    QCOMPARE(w.pass(), 1);
+    w.nextRow();                                      // by hand: row 2, first pass
+    QCOMPARE(w.row(), 2);
+    QCOMPARE(w.pass(), 0);
+    counter->injectPulse();                           // one pulse is not a pass yet ...
+    QCOMPARE(w.pass(), 0);
+    w.nextRow();                                      // ... and a hand move forgets it
+    counter->injectPulse();
+    QCOMPARE(w.pass(), 0);
+    counter->injectPulse();
+    QCOMPARE(w.pass(), 1);
+    // jumping to the same row again also starts at its first pass
+    w.setRow(w.row());
+    QCOMPARE(w.pass(), 0);
+}
+
+void TstGuider::rowLabelShowsThePasses()
+{
+    QTemporaryDir dir;
+    auto rowLabel = [](GuideWindow &w) {
+        for (QLabel *l : w.findChildren<QLabel *>()) if (l->text().contains(QLatin1String("Row")) || l->text().contains(QLatin1String("Cast on")) || l->text().contains(QLatin1String("Bind off"))) return l;
+        return static_cast<QLabel *>(nullptr);
+    };
+    GuideWindow tube;
+    QVERIFY(tube.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedMachine)));
+    QLabel *label = rowLabel(tube);
+    QVERIFY(label);
+    QVERIFY(!label->text().contains('['));            // cast on: one plain pass, nothing to show
+    tube.setRow(13);
+    const QString n = QString::number(tube.rowCount());
+    QVERIFY2(label->text().contains(QStringLiteral("[<b><u>front</u></b>/rear]")), qPrintable(label->text()));
+    QVERIFY(label->text().contains(QStringLiteral("Round 13 / ") + n));       // a tube is knitted in rounds
+    RowCounterConfig sim;
+    sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0;
+    QVERIFY(tube.applyCounterConfig(sim, false));
+    qobject_cast<SimulatedRowCounter *>(tube.rowCounter())->injectPulse();    // the front pass is done
+    QVERIFY2(label->text().contains(QStringLiteral("[front/<b><u>rear</u></b>]")), qPrintable(label->text()));
+    QVERIFY(label->text().indexOf("[") < label->text().indexOf("Round 13"));
+
+    GuideWindow colours;
+    QVERIFY(colours.openFile(projectFile(dir, stitchcore::KnitMethod::DoubleBedFlat, QStringLiteral("Checks 2x2"))));
+    QLabel *colourLabel = rowLabel(colours);
+    colours.setRow(16);
+    QVERIFY2(colourLabel->text().contains(QStringLiteral("[<b><u>A</u></b>,B]")), qPrintable(colourLabel->text()));
+    QVERIFY(colourLabel->text().contains(QStringLiteral("Row 16 / ") + QString::number(colours.rowCount())));
+    QVERIFY(colours.applyCounterConfig(sim, false));
+    qobject_cast<SimulatedRowCounter *>(colours.rowCounter())->injectPulse();
+    QVERIFY2(colourLabel->text().contains(QStringLiteral("[A,<b><u>B</u></b>]")), qPrintable(colourLabel->text()));
+
+    GuideWindow plain;                                // a plain hand-knitted row has no bracket at all
+    QVERIFY(plain.openFile(shirt()));
+    plain.setRow(5);
+    QVERIFY(!rowLabel(plain)->text().contains('['));
+}
+
 void TstGuider::looksOfDialogs()
 {
     // Pictures for a look by eye: GUIDER_TEST_SHOTS=dir
@@ -752,6 +908,26 @@ void TstGuider::looksOfDialogs()
         settings.show();
         QVERIFY(QTest::qWaitForWindowExposed(&settings));
         settings.grab().save(dir + QStringLiteral("/settings_") + name + QStringLiteral(".png"));
+    }
+    {   // the widest top bar: tubular double-bed with two colours, on a small screen
+        QTemporaryDir tmp;
+        for (int unit : {20, 9})
+        {
+            qputenv("GUIDER_UNIT", QByteArray::number(unit));
+            setGuideThemeChoice(ThemeChoice::Dark);
+            GuideWindow w;
+            QVERIFY(w.openFile(projectFile(tmp, stitchcore::KnitMethod::DoubleBedMachine, QStringLiteral("Checks 2x2"))));
+            RowCounterConfig sim;
+            sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0;
+            w.applyCounterConfig(sim, false);
+            w.setRow(13);
+            qobject_cast<SimulatedRowCounter *>(w.rowCounter())->injectPulse();
+            qobject_cast<SimulatedRowCounter *>(w.rowCounter())->injectPulse();
+            w.resize(unit == 20 ? QSize(1920, 1080) : QSize(800, 480));
+            w.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&w));
+            w.grab().save(dir + QStringLiteral("/passes_%1.png").arg(unit));
+        }
     }
     setGuideThemeChoice(ThemeChoice::System);
     qunsetenv("GUIDER_UNIT");

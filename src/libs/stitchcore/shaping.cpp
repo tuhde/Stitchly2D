@@ -11,13 +11,15 @@ QString knitMethodName(KnitMethod method)
         case KnitMethod::Round:            return QStringLiteral("round");
         case KnitMethod::CircularMachine:  return QStringLiteral("circular_machine");
         case KnitMethod::DoubleBedMachine: return QStringLiteral("double_bed_machine");
+        case KnitMethod::DoubleBedFlat:    return QStringLiteral("double_bed_flat");
     }
     return QStringLiteral("flat");
 }
 
 bool knitMethodFromName(const QString &name, KnitMethod &method)
 {
-    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine})
+    for (KnitMethod m : {KnitMethod::Flat, KnitMethod::Round, KnitMethod::CircularMachine, KnitMethod::DoubleBedMachine,
+                      KnitMethod::DoubleBedFlat})
     {
         if (name == knitMethodName(m))
         {

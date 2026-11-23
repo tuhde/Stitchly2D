@@ -11,7 +11,7 @@ class SimulatedRowCounter : public RowCounterSource
 {
     Q_OBJECT
 public:
-    explicit SimulatedRowCounter(int periodMs = 1000, int pulsesPerRow = 1, QObject *parent = nullptr);
+    explicit SimulatedRowCounter(int periodMs = 1000, int pulsesPerPass = 1, QObject *parent = nullptr);
 
     bool    start(QString *error = nullptr) override;
     void    stop() override;

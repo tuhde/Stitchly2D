@@ -84,7 +84,7 @@ private:
     QLabel      *m_testLabel = nullptr;
     RowCounterSource *m_test = nullptr;
     int          m_testPulses = 0;
-    int          m_testRows = 0;
+    int          m_testPasses = 0;
 };
 
 #endif

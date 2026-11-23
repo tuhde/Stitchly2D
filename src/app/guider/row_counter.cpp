@@ -5,18 +5,18 @@
 #include "gpio_row_counter.h"
 #include "simulated_row_counter.h"
 
-RowCounterSource::RowCounterSource(int pulsesPerRow, QObject *parent)
-    : QObject(parent), m_pulses(pulsesPerRow)
+RowCounterSource::RowCounterSource(int pulsesPerPass, QObject *parent)
+    : QObject(parent), m_pulses(pulsesPerPass)
 {
 }
 
 void RowCounterSource::pulse(int direction)
 {
     emit pulseCounted();
-    const int rows = m_pulses.add(direction < 0 ? -1 : 1);
-    if (rows != 0)
+    const int passes = m_pulses.add(direction < 0 ? -1 : 1);
+    if (passes != 0)
     {
-        emit rowsStepped(rows);
+        emit passStepped(passes);
     }
 }
 
@@ -37,9 +37,9 @@ QString RowCounterConfig::problem() const
     {
         return QObject::tr("Unknown row counter \"%1\" (use manual, gpio or simulated).").arg(kind);
     }
-    if (pulsesPerRow < 1)
+    if (pulsesPerPass < 1)
     {
-        return QObject::tr("Pulses per row must be 1 or more.");
+        return QObject::tr("Pulses per pass must be 1 or more.");
     }
     if (kind == QLatin1String("gpio"))
     {
@@ -76,7 +76,7 @@ void RowCounterConfig::load(QSettings &s)
     edge = s.value(QStringLiteral("edge"), edge).toString();
     pull = s.value(QStringLiteral("pull"), pull).toString();
     debounceMs = s.value(QStringLiteral("debounceMs"), debounceMs).toInt();
-    pulsesPerRow = s.value(QStringLiteral("pulsesPerRow"), pulsesPerRow).toInt();
+    pulsesPerPass = s.value(QStringLiteral("pulsesPerPass"), s.value(QStringLiteral("pulsesPerRow"), pulsesPerPass)).toInt();   // older name
     simulatedPeriodMs = s.value(QStringLiteral("simulatedPeriodMs"), simulatedPeriodMs).toInt();
     s.endGroup();
 }
@@ -90,7 +90,7 @@ void RowCounterConfig::save(QSettings &s) const
     s.setValue(QStringLiteral("edge"), edge);
     s.setValue(QStringLiteral("pull"), pull);
     s.setValue(QStringLiteral("debounceMs"), debounceMs);
-    s.setValue(QStringLiteral("pulsesPerRow"), pulsesPerRow);
+    s.setValue(QStringLiteral("pulsesPerPass"), pulsesPerPass);
     s.setValue(QStringLiteral("simulatedPeriodMs"), simulatedPeriodMs);
     s.endGroup();
 }
@@ -122,7 +122,7 @@ RowCounterSource *createRowCounter(const RowCounterConfig &config, QString *erro
     }
     if (config.kind == QLatin1String("simulated"))
     {
-        return new SimulatedRowCounter(config.simulatedPeriodMs, config.pulsesPerRow, parent);
+        return new SimulatedRowCounter(config.simulatedPeriodMs, config.pulsesPerPass, parent);
     }
     return nullptr;
 }

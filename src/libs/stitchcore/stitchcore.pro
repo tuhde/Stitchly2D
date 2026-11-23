@@ -23,7 +23,8 @@ HEADERS += \
     patternfile.h \
     stitchgrid.h \
     shaping.h \
-    instructions.h
+    instructions.h \
+    passes.h
 
 SOURCES += \
     stitchsize.cpp \
@@ -34,4 +35,5 @@ SOURCES += \
     patternfile.cpp \
     stitchgrid.cpp \
     shaping.cpp \
-    instructions.cpp
+    instructions.cpp \
+    passes.cpp

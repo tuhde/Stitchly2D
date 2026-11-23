@@ -10,7 +10,13 @@ for(lang, LANGUAGES) {
 
 include(../../src/app/stitchly2d/stitchly2d.pri)
 
+# stitchcore (instructions, passes) and stitchload (pattern loader, Application2D, VPattern) are libraries of their
+# own, so their files are not in stitchly2d.pri.
 SOURCES += \
-    $$files($$PWD/../../src/libs/stitchcore/*.cpp)
+    $$files($$PWD/../../src/libs/stitchcore/*.cpp) \
+    $$files($$PWD/../../src/libs/stitchload/core/*.cpp) \
+    $$files($$PWD/../../src/libs/stitchload/xml/*.cpp)
 HEADERS += \
-    $$files($$PWD/../../src/libs/stitchcore/*.h)
+    $$files($$PWD/../../src/libs/stitchcore/*.h) \
+    $$files($$PWD/../../src/libs/stitchload/core/*.h) \
+    $$files($$PWD/../../src/libs/stitchload/xml/*.h)

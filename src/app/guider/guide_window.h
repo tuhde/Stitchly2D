@@ -29,6 +29,9 @@ public:
     int  piece() const { return m_piece; }
     int  row() const { return m_row; }
     int  rowCount() const;
+    /** The carriage pass of the current row the machine is at (0-based), when a counter counts passes. */
+    int  pass() const { return m_pass; }
+    int  passesInRow(int row) const;
     const KnitJob &job() const { return m_job; }
     QStringList recentFiles() const;
 
@@ -52,7 +55,7 @@ public:
 
 public slots:
     void setPiece(int piece);
-    void setRow(int row);                 //!< clamped to 0 .. rowCount + 1
+    void setRow(int row);                 //!< clamped to 0 .. rowCount + 1; starts at the first pass of the row
     void nextRow() { setRow(m_row + 1); }
     void previousRow() { setRow(m_row - 1); }
     void nextBlock();                     //!< to the first row of the next block of instructions (Page Down)
@@ -69,12 +72,14 @@ protected:
 
 private:
     void updateView();
+    void stepPasses(int delta);          //!< from the row counter: a pass of the machine, or several
     void saveState() const;
     QString rowText() const;
 
     KnitJob       m_job;
     int           m_piece = 0;
     int           m_row = 0;
+    int           m_pass = 0;
     bool          m_screenWatched = false;
     QLabel       *m_title = nullptr;
     QLabel       *m_rowLabel = nullptr;

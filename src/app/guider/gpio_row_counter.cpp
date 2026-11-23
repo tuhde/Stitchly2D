@@ -9,7 +9,7 @@
 #endif
 
 GpioRowCounter::GpioRowCounter(const RowCounterConfig &config, QObject *parent)
-    : RowCounterSource(config.pulsesPerRow, parent), m_config(config)
+    : RowCounterSource(config.pulsesPerPass, parent), m_config(config)
 {
 }
 

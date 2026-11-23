@@ -172,7 +172,7 @@ SettingsDialog::SettingsDialog(const RowCounterConfig &config, QWidget *parent)
     sim->addWidget(m_period);
     layout->addWidget(m_simBox);
 
-    m_pulses = new StepperRow(tr("Pulses per row"), 1, 200, 1, page);
+    m_pulses = new StepperRow(tr("Pulses per pass"), 1, 200, 1, page);
     layout->addWidget(m_pulses);
 
     m_testButton = new QPushButton(tr("Test"), page);
@@ -198,7 +198,7 @@ SettingsDialog::SettingsDialog(const RowCounterConfig &config, QWidget *parent)
     m_edge->setValue(config.edge);
     m_pull->setValue(config.pull);
     m_debounce->setValue(config.debounceMs);
-    m_pulses->setValue(config.pulsesPerRow);
+    m_pulses->setValue(config.pulsesPerPass);
     m_period->setValue(config.simulatedPeriodMs);
 
     connect(m_kind, &ChoiceRow::changed, this, [this]() { stopTest(); updateVisibility(); });
@@ -226,7 +226,7 @@ RowCounterConfig SettingsDialog::config() const
     c.edge = m_edge->value();
     c.pull = m_pull->value();
     c.debounceMs = m_debounce->value();
-    c.pulsesPerRow = m_pulses->value();
+    c.pulsesPerPass = m_pulses->value();
     c.simulatedPeriodMs = m_period->value();
     return c;
 }
@@ -258,15 +258,15 @@ void SettingsDialog::toggleTest()
         m_test = nullptr;
         return;
     }
-    m_testPulses = m_testRows = 0;
+    m_testPulses = m_testPasses = 0;
     connect(m_test, &RowCounterSource::pulseCounted, this, [this]() { ++m_testPulses; });
-    connect(m_test, &RowCounterSource::rowsStepped, this, [this](int d) { m_testRows += d; });
+    connect(m_test, &RowCounterSource::passStepped, this, [this](int d) { m_testPasses += d; });
     auto refresh = [this]() {
         setStatusStyle(m_testLabel, QStringLiteral("ok"));
-        m_testLabel->setText(tr("Listening: %1 pulses, %2 rows").arg(m_testPulses).arg(m_testRows));
+        m_testLabel->setText(tr("Listening: %1 pulses, %2 passes").arg(m_testPulses).arg(m_testPasses));
     };
     connect(m_test, &RowCounterSource::pulseCounted, this, refresh);
-    connect(m_test, &RowCounterSource::rowsStepped, this, refresh);
+    connect(m_test, &RowCounterSource::passStepped, this, refresh);
     refresh();
     m_testButton->setText(tr("Stop test"));
 }

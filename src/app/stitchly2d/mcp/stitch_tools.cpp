@@ -327,8 +327,8 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 {QStringLiteral("includeSeamAllowance"), flag(QStringLiteral("Knit the outline with seam allowance."))},
                 {QStringLiteral("edgeStitches"), integer(QStringLiteral("Plain stitches kept at each edge before shaping."))},
                 {QStringLiteral("bulkFrom"), integer(QStringLiteral("A change of at least this many stitches at one edge is cast on or bound off instead of increased or decreased in one row; 0 = never."))},
-                {QStringLiteral("method"), oneOf({QStringLiteral("flat"), QStringLiteral("round"), QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine")},
-                                                 QStringLiteral("Default knitting method of all pieces: flat by hand, in the round by hand, on a circular knitting machine, or tubular on a double-bed machine. Single pieces can differ (set_knitting_method)."))},
+                {QStringLiteral("method"), oneOf({QStringLiteral("flat"), QStringLiteral("round"), QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine"), QStringLiteral("double_bed_flat")},
+                                                 QStringLiteral("Default knitting method of all pieces: flat by hand, in the round by hand, on a circular knitting machine, tubular on a double-bed machine, or flat on a double-bed machine. Single pieces can differ (set_knitting_method)."))},
                 {QStringLiteral("machineNeedles"), integer(QStringLiteral("Needles of the circular machine, or needles per bed of the double-bed machine; 0 = not checked. The instructions warn when a piece needs more."))},
                 {QStringLiteral("shapeOn"), oneOf({QStringLiteral("outside"), QStringLiteral("every")},
                                                   QStringLiteral("Rows on which the edges are shaped: outside rows only (row 1 is an outside row; a change needed on an inside row is worked on the outside row before it) or every row."))},
@@ -375,7 +375,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             {
                 if (!knitMethodFromName(text(a, "method"), s.shaping.method))
                 {
-                    return McpToolResult::error(QStringLiteral("method must be flat, round, circular_machine or double_bed_machine."));
+                    return McpToolResult::error(QStringLiteral("method must be flat, round, circular_machine, double_bed_machine or double_bed_flat."));
                 }
             }
             if (has(a, "machineNeedles"))
@@ -420,14 +420,15 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
         QStringLiteral("set_knitting_method"),
         QStringLiteral("Say how a piece is knitted: \"flat\" (by hand, back and forth, with outside and inside rows), "
                        "\"round\" (by hand in the round), \"circular_machine\" (circular knitting machine) or "
-                       "\"double_bed_machine\" (tubular on a double-bed machine); \"default\" takes the default of the "
+                       "\"double_bed_machine\" (tubular on a double-bed machine) or \"double_bed_flat\" (flat, back and forth, on a "
+                       "double-bed machine); \"default\" takes the default of the "
                        "stitch settings again. The three round methods knit a tube: the width of the piece is the "
                        "circumference, the instructions count rounds, and shaping is done at the beginning and the end "
                        "of the round. On the machines the shaping is needle work (the double-bed text splits it between "
                        "the beds). Use get_instructions to read the result."),
         object({{QStringLiteral("piece"), str(QStringLiteral("Piece name; default: the selected piece."))},
                 {QStringLiteral("method"), oneOf({QStringLiteral("default"), QStringLiteral("flat"), QStringLiteral("round"),
-                                                  QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine")},
+                                                  QStringLiteral("circular_machine"), QStringLiteral("double_bed_machine"), QStringLiteral("double_bed_flat")},
                                                  QStringLiteral("How the piece is knitted."))}},
                {QStringLiteral("method")}),
         false, [w](const QJsonObject &a) {
@@ -441,7 +442,7 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
                 KnitMethod m;
                 if (!knitMethodFromName(name, m))
                 {
-                    return McpToolResult::error(QStringLiteral("method must be default, flat, round, circular_machine or double_bed_machine."));
+                    return McpToolResult::error(QStringLiteral("method must be default, flat, round, circular_machine, double_bed_machine or double_bed_flat."));
                 }
                 method = int(m);
             }

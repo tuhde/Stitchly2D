@@ -488,9 +488,11 @@ void MainWindow::createDocks()
     m_method->addItem(tr("In the round (by hand)"), int(KnitMethod::Round));
     m_method->addItem(tr("Circular knitting machine"), int(KnitMethod::CircularMachine));
     m_method->addItem(tr("Double-bed machine (tubular)"), int(KnitMethod::DoubleBedMachine));
+    m_method->addItem(tr("Double-bed machine (flat)"), int(KnitMethod::DoubleBedFlat));
     m_method->setToolTip(tr("How the pieces are knitted, unless a piece has its own method (Bands and patterns). "
-                            "Round, circular machine and double-bed machine knit a tube: the width of the piece is "
-                            "the circumference, and there are no inside rows."));
+                            "Round, circular machine and the tubular double-bed machine knit a tube: the width of the piece is "
+                            "the circumference, and there are no inside rows. The flat double-bed machine knits "
+                            "back and forth with both beds."));
     form->addRow(tr("Knitting method"), m_method);
 
     m_needles = new QSpinBox;
@@ -560,6 +562,7 @@ void MainWindow::createDocks()
     m_pieceMethod->addItem(tr("In the round (by hand)"), int(KnitMethod::Round));
     m_pieceMethod->addItem(tr("Circular knitting machine"), int(KnitMethod::CircularMachine));
     m_pieceMethod->addItem(tr("Double-bed machine (tubular)"), int(KnitMethod::DoubleBedMachine));
+    m_pieceMethod->addItem(tr("Double-bed machine (flat)"), int(KnitMethod::DoubleBedFlat));
     methodRow->addWidget(m_pieceMethod, 1);
     bandsLayout->addLayout(methodRow);
     connect(m_pieceMethod, &QComboBox::currentIndexChanged, this, [this]() {
@@ -772,7 +775,7 @@ bool MainWindow::setPieceMethod(const QString &piece, int method, QString *error
     {
         m_methods.remove(piece);
     }
-    else if (method > int(KnitMethod::DoubleBedMachine))
+    else if (method > int(KnitMethod::DoubleBedFlat))
     {
         if (error) *error = tr("Unknown knitting method.");
         return false;

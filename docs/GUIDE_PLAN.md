@@ -22,6 +22,13 @@ Goal: a program that shows an open dialog for a pattern, then shows its instruct
 6. **Autologin/autostart (last phase, docs + files only):** raspi-config autologin, systemd user service or compositor autostart (labwc/wayfire) launching the guide, restart on crash, `QT_QPA_PLATFORM` (wayland/eglfs) note, user in `gpio`/`dialout` groups. Ship an example service file and a short doc in `docs/`.
 7. **i18n:** reuse `translations.pri` setup with a new context.
 
+## Passes per row (decided)
+A row can need several carriage passes. The counter counts passes; the guide decides when a row is done:
+- tubular double-bed machine: every yarn of the row on the front and then on the rear bed (plain row: 2 passes);
+- flat on a double-bed machine (new method `double_bed_flat`, for large pieces): one pass per yarn of the row (plain row: 1);
+- all other methods: one pass; the colours of the row are worked within it.
+The yarns of a row come from the colour patterns (base yarn first, then the pattern's legend order). `stitchcore/passes.*` computes them per row; `KnitPiece::rowPasses` carries them to the guide. The top bar shows the row as `[red,green]  Row 16 / 200` or `[front/rear]  Round 13 / 50` with the pass the machine is at marked. "Pulses per pass" in the settings is the sensor's pulses for one pass (usually 1). Hand moves restart the row at its first pass and forget unfinished pulses.
+
 ## Phases
 1. (done) Extract loader lib; editor and tests still build/pass.
 2. (done) Guide skeleton: open dialog → piece → fullscreen rolling view, manual row control, runs on desktop.

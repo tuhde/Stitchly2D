@@ -75,7 +75,7 @@ Claude learns the tools from the server itself; you do not need to teach it.
 | Area | Tools |
 |---|---|
 | Look | `get_project_info`, `list_pieces` (size, rows, cast-on, widest row, bind-off, bands), `get_instructions`, `get_row_table`, `get_bands`, `get_catalog`, `screenshot` |
-| Settings | `set_stitch_settings` (catalog stitch or stitch width and row height in mm, seam allowance, edge stitches, increase and decrease method, from how many stitches an edge is cast on or bound off, shaping on outside rows only or on every row, default knitting method and machine needles), `select_piece`, `set_knitting_method` (flat, round, circular_machine, double_bed_machine or default for one piece) |
+| Settings | `set_stitch_settings` (catalog stitch or stitch width and row height in mm, seam allowance, edge stitches, increase and decrease method, from how many stitches an edge is cast on or bound off, shaping on outside rows only or on every row, default knitting method and machine needles), `select_piece`, `set_knitting_method` (flat, round, circular_machine, double_bed_machine, double_bed_flat or default for one piece) |
 | Catalog | `set_basic_stitch`, `delete_basic_stitch`, `set_pattern` (a chart of text, top row first), `delete_pattern` |
 | Pieces | `set_bands` (bands from the bottom with a basic stitch, a height and patterns laid over them) |
 | Files | `open_pattern`, `open_project`, `save_project`, `export_instructions`, `export_row_table` (each asks you first) |

@@ -222,10 +222,6 @@
         <translation>Das Projekt konnte nicht geladen werden: %1</translation>
     </message>
     <message>
-        <source>--method must be flat, round, circular_machine or double_bed_machine.</source>
-        <translation>--method muss flat, round, circular_machine oder double_bed_machine sein.</translation>
-    </message>
-    <message>
         <source>--shape-on must be &quot;outside&quot; or &quot;every&quot;.</source>
         <translation>--shape-on muss „outside“ oder „every“ sein.</translation>
     </message>
@@ -276,6 +272,10 @@
     <message>
         <source>  [no grainline: drawn orientation used]</source>
         <translation>  [kein Fadenlauf: gezeichnete Ausrichtung verwendet]</translation>
+    </message>
+    <message>
+        <source>--method must be flat, round, circular_machine, double_bed_machine or double_bed_flat.</source>
+        <translation>--method muss flat, round, circular_machine, double_bed_machine oder double_bed_flat sein.</translation>
     </message>
 </context>
 <context>
@@ -529,6 +529,33 @@
         <source>Bind off %1 stitches.</source>
         <translation>%1 Maschen abketten.</translation>
     </message>
+    <message>
+        <source>bring %1 needle(s) into work on both beds at %2</source>
+        <translation>%1 Nadel(n) an beiden Betten am %2 einschalten</translation>
+    </message>
+    <message>
+        <source>transfer %1 stitch(es) to the neighbouring needle(s) on both beds and take the empty needle(s) out of work at %2</source>
+        <translation>%1 Masche(n) an beiden Betten auf die Nachbarnadel(n) umhängen und die leere(n) Nadel(n) am %2 ausschalten</translation>
+    </message>
+    <message>
+        <source>Put %1 needles in work on both beds and cast on%2. Knit back and forth.</source>
+        <translation>%1 Nadeln an beiden Betten einschalten und anschlagen%2. Hin und zurück stricken.</translation>
+    </message>
+</context>
+<context>
+    <name>KnitJob</name>
+    <message>
+        <source>Could not load the project: %1</source>
+        <translation>Das Projekt konnte nicht geladen werden: %1</translation>
+    </message>
+    <message>
+        <source>Stitch width and row height must be greater than 0.</source>
+        <translation>Maschenbreite und Reihenhöhe müssen größer als 0 sein.</translation>
+    </message>
+    <message>
+        <source>Could not load the pattern: %1</source>
+        <translation>Das Schnittmuster konnte nicht geladen werden: %1</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -683,10 +710,6 @@
     <message>
         <source>Double-bed machine (tubular)</source>
         <translation>Doppelbettmaschine (Schlauch)</translation>
-    </message>
-    <message>
-        <source>How the pieces are knitted, unless a piece has its own method (Bands and patterns). Round, circular machine and double-bed machine knit a tube: the width of the piece is the circumference, and there are no inside rows.</source>
-        <translation>Wie die Teile gestrickt werden, sofern ein Teil keine eigene Methode hat (Abschnitte und Muster). In Runden, Rundstrick- und Doppelbettmaschine stricken einen Schlauch: Die Breite des Teils ist der Umfang, und es gibt keine Rückreihen.</translation>
     </message>
     <message>
         <source>Knitting method</source>
@@ -1184,6 +1207,14 @@ Stitches and patterns: Catalog &gt; Edit catalog.</source>
 Maschengröße, Formgebung und Strickmethode: Dock „Maschenangaben“.
 Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
     </message>
+    <message>
+        <source>Double-bed machine (flat)</source>
+        <translation>Doppelbettmaschine (flach)</translation>
+    </message>
+    <message>
+        <source>How the pieces are knitted, unless a piece has its own method (Bands and patterns). Round, circular machine and the tubular double-bed machine knit a tube: the width of the piece is the circumference, and there are no inside rows. The flat double-bed machine knits back and forth with both beds.</source>
+        <translation>Wie die Teile gestrickt werden, sofern ein Teil keine eigene Methode hat (Abschnitte und Muster). In Runden, Rundstrick- und Doppelbettmaschine (Schlauch) stricken einen Schlauch: Die Breite des Teils ist der Umfang, und es gibt keine Rückreihen. Die flache Doppelbettmaschine strickt hin und zurück mit beiden Betten.</translation>
+    </message>
 </context>
 <context>
     <name>McpIntegration</name>
@@ -1377,6 +1408,24 @@ Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
     <message>
         <source>none</source>
         <translation>keine</translation>
+    </message>
+</context>
+<context>
+    <name>Passes</name>
+    <message>
+        <source>main</source>
+        <comment>yarn of the stitches that have no colour</comment>
+        <translation>Hauptgarn</translation>
+    </message>
+    <message>
+        <source>front</source>
+        <comment>bed of the machine</comment>
+        <translation>vorne</translation>
+    </message>
+    <message>
+        <source>rear</source>
+        <comment>bed of the machine</comment>
+        <translation>hinten</translation>
     </message>
 </context>
 <context>
@@ -1895,10 +1944,6 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
         <translation>Mit --cli: Ränder nur in Hinreihen („outside“, Standard) oder in jeder Reihe („every“) formen.</translation>
     </message>
     <message>
-        <source>With --cli: knit all pieces flat, round, circular_machine or double_bed_machine.</source>
-        <translation>Mit --cli: alle Teile flach (flat), in Runden (round), auf der Rundstrickmaschine (circular_machine) oder der Doppelbettmaschine (double_bed_machine) stricken.</translation>
-    </message>
-    <message>
         <source>With --cli: needles of the circular machine, or per bed of the double-bed machine.</source>
         <translation>Mit --cli: Nadeln der Rundstrickmaschine bzw. pro Bett der Doppelbettmaschine.</translation>
     </message>
@@ -1921,6 +1966,10 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>--needles must be a number, 0 or more.</source>
         <translation>--needles muss eine Zahl sein, 0 oder mehr.</translation>
+    </message>
+    <message>
+        <source>With --cli: knit all pieces flat, round, circular_machine, double_bed_machine or double_bed_flat.</source>
+        <translation>Mit --cli: alle Teile flach (flat), in Runden (round), auf der Rundstrickmaschine (circular_machine), im Schlauch auf der Doppelbettmaschine (double_bed_machine) oder flach auf der Doppelbettmaschine (double_bed_flat) stricken.</translation>
     </message>
 </context>
 </TS>

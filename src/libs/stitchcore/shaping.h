@@ -18,13 +18,20 @@ enum class DecreaseMethod { K2tog_Ssk, K2tog };
  * Round = by hand in the round, CircularMachine = on a circular knitting machine (a cylinder of needles),
  * DoubleBedMachine = tubular on a double-bed machine (half of the stitches on each bed). There are no inside rows
  * in a tube, and the width of the piece is the circumference.
+ * DoubleBedFlat = a flat piece on a double-bed machine (large pieces, e.g. double-bed jacquard): both beds are
+ * worked with the same needles, so there are edges and outside and inside rows, like Flat.
+ * (Appended last so that saved numbers stay valid; projects store the names.)
  */
-enum class KnitMethod { Flat, Round, CircularMachine, DoubleBedMachine };
+enum class KnitMethod { Flat, Round, CircularMachine, DoubleBedMachine, DoubleBedFlat };
 
-inline bool isRound(KnitMethod m) { return m != KnitMethod::Flat; }
-inline bool isMachine(KnitMethod m) { return m == KnitMethod::CircularMachine || m == KnitMethod::DoubleBedMachine; }
+/** Tube methods; DoubleBedFlat is worked back and forth like Flat. */
+inline bool isRound(KnitMethod m) { return m != KnitMethod::Flat && m != KnitMethod::DoubleBedFlat; }
+inline bool isMachine(KnitMethod m)
+{
+    return m == KnitMethod::CircularMachine || m == KnitMethod::DoubleBedMachine || m == KnitMethod::DoubleBedFlat;
+}
 
-QString knitMethodName(KnitMethod method);                         //!< "flat", "round", "circular_machine", "double_bed_machine"
+QString knitMethodName(KnitMethod method);                         //!< "flat", "round", "circular_machine", "double_bed_machine", "double_bed_flat"
 bool knitMethodFromName(const QString &name, KnitMethod &method);
 
 /** On which rows the edges are shaped. Row 1 is an outside row, then they alternate: inside, outside, ... */

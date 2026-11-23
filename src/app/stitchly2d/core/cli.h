@@ -17,7 +17,7 @@ struct CliOptions
     bool    hasRowHeight = false;
     double  rowHeightMm = 3.5;
     bool    seamAllowance = false;     //!< knit the outline with seam allowance (a project can ask for it, too)
-    QString method;                    //!< knit all pieces this way: flat, round, circular_machine, double_bed_machine; empty = as the project says
+    QString method;                    //!< knit all pieces this way: flat, round, circular_machine, double_bed_machine, double_bed_flat; empty = as the project says
     int     needles = -1;              //!< machine needles; -1 = as the project says
     QString shapeOn;                   //!< "outside" or "every"; empty = the project's (or the default: outside)
     bool    csv = false;               //!< print the row table instead of the instructions
