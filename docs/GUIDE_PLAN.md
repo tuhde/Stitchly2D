@@ -34,7 +34,7 @@ The yarns of a row come from the colour patterns (base yarn first, then the patt
 2. (done) Guide skeleton: open dialog → piece → fullscreen rolling view, manual row control, runs on desktop.
 3. (done) Structured steps + tests (`src/test/stitchcore`), offscreen UI test like `src/test/mainwindow`.
 4. (in progress: interface, simulated and one-pin GPIO done; settings screen done; USB open) Row counter interface + GPIO and USB sources (needs hardware details).
-5. Pi packaging: build notes, autologin/autostart, kiosk behavior.
+5. (done) Pi packaging: `docs/GUIDER_PI.md`, `share/guider/` (desktop entry, autostart file, systemd user service).
 
 ## Decisions
 - Program name: **guider**.

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Guider
+Comment=Start the knitting guide at login (reopens the last pattern)
+Exec=guider
+X-GNOME-Autostart-enabled=true

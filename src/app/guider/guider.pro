@@ -26,6 +26,11 @@ unix:!macx {
     isEmpty(PREFIX): PREFIX = /usr/local
     target.path = $$PREFIX/bin
     INSTALLS += target
+
+    # Desktop entry for the application menu; the autostart and systemd files are in share/guider (see docs/GUIDER_PI.md)
+    desktop.path = $$PREFIX/share/applications
+    desktop.files = $$PWD/../../../share/guider/guider.desktop
+    INSTALLS += desktop
 }
 
 # Static libraries. Several of them refer to each other, so link them as a group.

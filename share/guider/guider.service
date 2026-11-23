@@ -1,0 +1,17 @@
+# systemd user service: starts guider in the graphical session and restarts it when it crashes.
+# Install:  mkdir -p ~/.config/systemd/user && cp guider.service ~/.config/systemd/user/
+#           systemctl --user daemon-reload && systemctl --user enable guider.service
+# It starts with the X11 session (graphical-session.target). Adjust ExecStart if guider is not in /usr/local/bin.
+[Unit]
+Description=Guider knitting guide
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/guider
+Environment=QT_QPA_PLATFORM=xcb
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

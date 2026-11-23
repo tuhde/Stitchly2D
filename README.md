@@ -59,6 +59,10 @@ bind-off stitches and the written instructions for every piece. `--csv` prints t
 pattern. Pieces are turned so their grainline is vertical. `--cli` needs no display. `src/test/smoke_test.sh
 <path to stitchly2d>` runs it on the bundled sample patterns.
 
+## Guider (knitting guide)
+
+`guider` is a second program for a Raspberry Pi with a touch screen at the knitting machine. It opens a `.stitchly` or `.sm2d` file, shows the instructions as large rolling text, and follows a row counter (touch buttons, a GPIO sensor or a simulated one). Run `guider pattern.stitchly` (`--windowed` for a window, `--help` for all options). Keys: arrows/Space/Backspace row by row, Page Up/Down by block, Home/End first row and bind-off, O open, P piece, G go to row, S settings. Setup on the Pi (build, GPIO, autostart): [docs/GUIDER_PI.md](docs/GUIDER_PI.md); design: [docs/GUIDE_PLAN.md](docs/GUIDE_PLAN.md).
+
 ## Languages
 
 The program is written in English; German is the first translation. View > Language saves the choice (used from the

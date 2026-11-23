@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Guider
+Name[de]=Strickführer
+Comment=Rolling knitting instructions that follow the row counter
+Comment[de]=Fortlaufende Strickanleitung, die dem Reihenzähler folgt
+Exec=guider
+Icon=applications-other
+Terminal=false
+Categories=Utility;
