@@ -186,12 +186,25 @@ QString typeSuffix(const StitchGrid &grid, int row, bool multi)
 }
 }
 
-QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &options)
+namespace
 {
-    QStringList lines;
+/** Collects the lines; the rows to attach to the next lines are set with rows(). */
+struct StepSink
+{
+    QVector<InstructionStep> steps;
+    int first = 0;
+    int last  = 0;
+    void rows(int f, int l) { first = f; last = l; }
+    StepSink &operator<<(const QString &text) { steps.append({first, last, text}); return *this; }
+};
+}
+
+QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const ShapingOptions &options)
+{
+    StepSink lines;
     if (grid.isEmpty())
     {
-        return lines;
+        return lines.steps;
     }
     const Words w(isRound(options.method));   // a tube is knitted in rounds, not in rows
     const bool multi = grid.bands().size() > 1;
@@ -275,6 +288,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             if (run.size() >= 3 && plainRows)
             {
                 const Shaping &z = segments.at(run.last()).shaping;
+                lines.rows(s.shaping.row + 1, lastRow + 1);
                 const QString cadence = gap == 1 ? Instructions::tr("every %1").arg(w.row)
                                        : gap == 2 ? Instructions::tr("every other %1").arg(w.row)
                                                   : Instructions::tr("every %1 %2").arg(ordinal(gap), w.row);
@@ -295,6 +309,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             auto flush = [&](int endRow) {
                 const int n = endRow - blockStart;
                 if (n <= 0) return;
+                lines.rows(blockStart + 1, endRow);
                 if (n == 1)
                     lines << Instructions::tr("%1 %2%3: work even.").arg(w.Row).arg(blockStart + 1)
                                  .arg(typeSuffix(grid, blockStart, multi));
@@ -307,6 +322,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
                 const QVector<Run> runs = grid.overlayRuns(r);
                 if (runs.isEmpty()) continue;
                 flush(r);
+                lines.rows(r + 1, r + 1);
                 lines << Instructions::tr("%1 %2%3: %4.").arg(w.Row).arg(r + 1).arg(typeSuffix(grid, r, multi))
                              .arg(runsText(runs));
                 blockStart = r + 1;
@@ -317,6 +333,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
         if (s.shaping.bandChange)
         {
             const QString &name = grid.bands().at(s.shaping.band).stitchType;
+            lines.rows(first, first);
             if (s.shaping.stitchesBefore == s.shaping.stitchesAfter)
             {
                 lines << Instructions::tr("%1 %2: change to %3 (%4 stitches).")
@@ -339,6 +356,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             }
             continue;
         }
+        lines.rows(first, first);
         lines << Instructions::tr("%1 %2: %3. (%4 stitches)").arg(w.Row).arg(first).arg(shapingBody(s.shaping, options))
                      .arg(s.shaping.stitchesAfter);
         const QVector<Run> eruns = grid.overlayRuns(s.firstRow);
@@ -347,6 +365,7 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             lines << Instructions::tr("    pattern: %1.").arg(runsText(eruns));
         }
     }
+    lines.rows(grid.rowCount() + 1, grid.rowCount() + 1);
     switch (options.method)
     {
         case KnitMethod::CircularMachine:
@@ -359,7 +378,30 @@ QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &opti
             lines << Instructions::tr("Bind off %1 stitches.").arg(grid.bindOff());
             break;
     }
+    return lines.steps;
+}
+
+QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &options)
+{
+    QStringList lines;
+    for (const InstructionStep &s : writeInstructionSteps(grid, options))
+    {
+        lines << s.text;
+    }
     return lines;
+}
+
+QVector<int> stepsForRow(const QVector<InstructionStep> &steps, int row)
+{
+    QVector<int> found;
+    for (int i = 0; i < steps.size(); ++i)
+    {
+        if (steps.at(i).firstRow <= row && row <= steps.at(i).lastRow)
+        {
+            found << i;
+        }
+    }
+    return found;
 }
 
 QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options)

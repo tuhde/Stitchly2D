@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QTextStream>
 
+#include "../stitchload/core/knit_job.h"
 #include "../stitchload/core/pattern_loader.h"
 #include "../../../libs/stitchcore/instructions.h"
 #include "../../../libs/stitchcore/pieceoutline.h"
@@ -13,11 +14,6 @@
 #include "../../../libs/stitchcore/stitchgrid.h"
 
 using namespace stitchcore;
-
-QString userCatalogPath()
-{
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QStringLiteral("/catalog.json");
-}
 
 int runCli(const CliOptions &options, QTextStream &out, QTextStream &err)
 {

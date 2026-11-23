@@ -4,11 +4,30 @@
 
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 #include "shaping.h"
 
 namespace stitchcore
 {
+
+/**
+ * One line of the written instructions together with the rows it applies to (one-based, inclusive).
+ * Lines before the first row (cast on, notes, warnings) have firstRow = lastRow = 0; the bind-off line
+ * has firstRow = lastRow = rowCount + 1. A "pattern:" line follows the row line it belongs to and has the same rows.
+ */
+struct InstructionStep
+{
+    int     firstRow = 0;
+    int     lastRow  = 0;
+    QString text;
+};
+
+/** The instructions as steps. writeInstructions() returns just their texts. */
+QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const ShapingOptions &options = ShapingOptions());
+
+/** Indexes of the steps that cover this row (0 = before the first row, rowCount + 1 = after the last), in order. */
+QVector<int> stepsForRow(const QVector<InstructionStep> &steps, int row);
 
 /** Written instructions for one piece, one line per step. Row numbers are one-based. */
 QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &options = ShapingOptions());

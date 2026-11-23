@@ -4,10 +4,9 @@
 
 #include <QString>
 
-class QTextStream;
+#include "../../../libs/stitchload/core/knit_job.h"   // userCatalogPath()
 
-/** Where the user's catalog (catalog.json) is kept. */
-QString userCatalogPath();
+class QTextStream;
 
 struct CliOptions
 {

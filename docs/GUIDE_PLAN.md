@@ -23,8 +23,8 @@ Goal: a program that shows an open dialog for a pattern, then shows its instruct
 7. **i18n:** reuse `translations.pri` setup with a new context.
 
 ## Phases
-1. Extract loader lib; editor and tests still build/pass.
-2. Guide skeleton: open dialog → piece → fullscreen rolling view, manual row control, runs on desktop.
+1. (done) Extract loader lib; editor and tests still build/pass.
+2. (done) Guide skeleton: open dialog → piece → fullscreen rolling view, manual row control, runs on desktop.
 3. Structured steps + tests (`src/test/stitchcore`), offscreen UI test like `src/test/mainwindow`.
 4. Row counter interface + GPIO and USB sources (needs hardware details).
 5. Pi packaging: build notes, autologin/autostart, kiosk behavior.

@@ -23,6 +23,7 @@ private slots:
     void trapezoid();
     void invalidInput();
     void instructionsText();
+    void instructionSteps();
     void csv();
     void library();
     void bandsRibThenStockinette();
@@ -142,6 +143,34 @@ void TstStitchCore::instructionsText()
     QVERIFY(lines.last().startsWith(QLatin1String("Bind off")));
     QVERIFY(lines.join('\n').contains(QLatin1String("increase")));
     QVERIFY(lines.join('\n').contains(QLatin1String("M1")));
+}
+
+void TstStitchCore::instructionSteps()
+{
+    const QPolygonF trap({{50, 0}, {150, 0}, {200, 300}, {0, 300}});
+    const StitchGrid grid = StitchGrid::build(trap, g20x30());
+    const QVector<InstructionStep> steps = writeInstructionSteps(grid);
+    // Same lines as writeInstructions().
+    QStringList texts;
+    for (const InstructionStep &s : steps) texts << s.text;
+    QCOMPARE(texts, writeInstructions(grid));
+    // Cast on before row 1, bind off after the last row.
+    QCOMPARE(steps.first().firstRow, 0);
+    QCOMPARE(steps.first().lastRow, 0);
+    QCOMPARE(steps.last().firstRow, grid.rowCount() + 1);
+    QVERIFY(stepsForRow(steps, 0).contains(0));        // plus notes that come before the first row
+    QCOMPARE(stepsForRow(steps, grid.rowCount() + 1), QVector<int>{steps.size() - 1});
+    // Every row is covered by at least one step and by no two row steps of different blocks.
+    for (int row = 1; row <= grid.rowCount(); ++row)
+    {
+        const QVector<int> found = stepsForRow(steps, row);
+        QVERIFY2(!found.isEmpty(), qPrintable(QStringLiteral("row %1 has no step").arg(row)));
+        for (int i : found)
+        {
+            QVERIFY(steps.at(i).firstRow <= row && row <= steps.at(i).lastRow);
+        }
+    }
+    QVERIFY(stepsForRow(steps, grid.rowCount() + 2).isEmpty());
 }
 
 void TstStitchCore::csv()

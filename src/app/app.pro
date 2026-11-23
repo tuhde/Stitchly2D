@@ -1,3 +1,3 @@
 message("Entering app.pro")
 TEMPLATE = subdirs
-SUBDIRS = stitchly2d
+SUBDIRS = stitchly2d guider

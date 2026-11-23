@@ -17,12 +17,14 @@ OBJECTS_DIR = obj
 
 SOURCES += \
     core/application_2d.cpp \
+    core/knit_job.cpp \
     core/pattern_loader.cpp \
     xml/vpattern.cpp
 
 HEADERS += \
     core/application_2d.h \
     core/headless_window.h \
+    core/knit_job.h \
     core/pattern_loader.h \
     xml/vpattern.h
 
