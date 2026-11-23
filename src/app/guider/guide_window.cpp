@@ -167,6 +167,10 @@ void GuideWindow::setPiece(int piece)
 
 void GuideWindow::setRow(int row)
 {
+    if (m_piece < 0 || m_piece >= m_job.pieces.size())
+    {
+        return;      // nothing open
+    }
     row = qBound(0, row, rowCount() + 1);
     if (row == m_row)
     {

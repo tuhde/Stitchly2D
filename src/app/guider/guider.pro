@@ -3,8 +3,8 @@ message("Entering guider.pro")
 # File with common stuff for whole project
 include(../../../common.pri)
 
-# Only what the pattern loader needs; no multimedia, network or print support of our own.
-QT += core gui widgets xml printsupport svg network multimedia
+# The Seamly2D libraries behind the pattern loader need multimedia (sound effects) and print support; network is not needed.
+QT += core gui widgets xml printsupport svg multimedia
 
 TARGET = guider
 TEMPLATE = app
@@ -14,18 +14,7 @@ OBJECTS_DIR = obj
 RCC_DIR = rcc
 UI_DIR = uic
 
-SOURCES += \
-    main.cpp \
-    guide_window.cpp \
-    step_view.cpp \
-    open_dialog.cpp \
-    guide_scale.cpp
-
-HEADERS += \
-    guide_window.h \
-    step_view.h \
-    open_dialog.h \
-    guide_scale.h
+include(guider.pri)
 
 include(../stitchly2d/warnings.pri)
 
