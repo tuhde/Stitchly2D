@@ -14,8 +14,9 @@
 #include <QSettings>
 #include <QVBoxLayout>
 
-#include "counter_settings_dialog.h"
+#include "settings_dialog.h"
 #include "guide_scale.h"
+#include "guide_theme.h"
 #include "open_dialog.h"
 #include "row_counter.h"
 #include "step_view.h"
@@ -48,7 +49,7 @@ GuideWindow::GuideWindow(QWidget *parent)
     auto *top = new QHBoxLayout;
     auto *openButton = new QPushButton(tr("Open"), this);
     m_pieceButton = new QPushButton(tr("Piece"), this);
-    auto *settingsButton = new QPushButton(tr("Counter"), this);
+    auto *settingsButton = new QPushButton(tr("Settings"), this);
     m_title = new QLabel(this);
     m_rowLabel = new QLabel(this);
     QFont big = font();
@@ -97,12 +98,11 @@ GuideWindow::GuideWindow(QWidget *parent)
     bottom->addWidget(m_next, 2);
     root->addLayout(bottom);
 
-    setStyleSheet(QStringLiteral("GuideWindow { background: #101010; }"));
     setAttribute(Qt::WA_StyledBackground, true);
 
     connect(openButton, &QPushButton::clicked, this, &GuideWindow::chooseFile);
     connect(m_pieceButton, &QPushButton::clicked, this, &GuideWindow::choosePiece);
-    connect(settingsButton, &QPushButton::clicked, this, &GuideWindow::openCounterSettings);
+    connect(settingsButton, &QPushButton::clicked, this, &GuideWindow::openSettings);
     connect(m_prev, &QPushButton::clicked, this, &GuideWindow::previousRow);
     connect(m_next, &QPushButton::clicked, this, &GuideWindow::nextRow);
     connect(jump, &QPushButton::clicked, this, &GuideWindow::jumpToRow);
@@ -323,8 +323,8 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
         case Qt::Key_G:
             jumpToRow();
             break;
-        case Qt::Key_C:
-            openCounterSettings();
+        case Qt::Key_S:
+            openSettings();
             break;
         case Qt::Key_F11:
             isFullScreen() ? showNormal() : showFullScreen();
@@ -394,7 +394,7 @@ void GuideWindow::setRowCounter(RowCounterSource *counter)
     counter->setParent(this);
     auto showState = [this](RowCounterSource::State state, const QString &message) {
         const bool error = state == RowCounterSource::State::Error;
-        m_counterLabel->setStyleSheet(error ? QStringLiteral("color: #ff6b6b;") : QStringLiteral("color: #7fbf7f;"));
+        setStatusStyle(m_counterLabel, error ? QStringLiteral("error") : QStringLiteral("ok"));
         m_counterLabel->setText(error ? message : (state == RowCounterSource::State::Running ? m_counter->description() : tr("counter stopped")));
         m_counterLabel->setToolTip(message);
     };
@@ -426,16 +426,20 @@ bool GuideWindow::applyCounterConfig(const RowCounterConfig &config, bool save, 
     return true;
 }
 
-void GuideWindow::openCounterSettings()
+void GuideWindow::openSettings()
 {
     // The test in the dialog needs the pin, so let go of it while the dialog is open.
     if (m_counter)
     {
         m_counter->stop();
     }
-    CounterSettingsDialog dialog(m_counterConfig, this);
+    SettingsDialog dialog(m_counterConfig, this);
     if (dialog.exec() == QDialog::Accepted)
     {
+        if (dialog.themeChoice() != guideThemeChoice())
+        {
+            setGuideThemeChoice(dialog.themeChoice());
+        }
         applyCounterConfig(dialog.config(), true);
     }
     else if (m_counter)

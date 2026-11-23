@@ -58,7 +58,7 @@ public slots:
     void chooseFile();
     void choosePiece();
     void jumpToRow();
-    void openCounterSettings();
+    void openSettings();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

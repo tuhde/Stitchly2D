@@ -2,15 +2,18 @@
 // checks the saved state and that the layout fits screens of different sizes.
 #include <QtTest>
 
+#include <QFileDialog>
 #include <QLabel>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
 
 #include "../../app/guider/guide_scale.h"
-#include "../../app/guider/counter_settings_dialog.h"
+#include "../../app/guider/settings_dialog.h"
 #include "../../app/guider/gpio_row_counter.h"
+#include "../../app/guider/guide_theme.h"
 #include "../../app/guider/guide_window.h"
+#include "../../app/guider/open_dialog.h"
 #include "../../app/guider/row_counter.h"
 #include "../../app/guider/simulated_row_counter.h"
 #include "../../app/guider/step_view.h"
@@ -56,6 +59,13 @@ private slots:
     void settingsDialogTestCountsPulses();
     void settingsDialogFitsSmallScreen();
     void applyConfigReplacesCounter();
+    void themeNamesRoundTrip();
+    void themeFollowsSystem();
+    void themeChoiceIsSavedAndApplied();
+    void buttonsStandOutInEveryTheme_data();
+    void buttonsStandOutInEveryTheme();
+    void settingsDialogChoosesTheme();
+    void looksOfDialogs();
 };
 
 void TstGuider::init()
@@ -209,7 +219,7 @@ void TstGuider::layoutFitsScreens()
     bool highlight = false;
     for (int y = 0; y < image.height() && !highlight; y += 4)
         for (int x = 0; x < image.width() && !highlight; x += 4)
-            highlight = image.pixelColor(x, y) == QColor(0x1d, 0x2c, 0x44);
+            highlight = image.pixelColor(x, y) == guideTheme().stepBackground;
     QVERIFY(highlight);
     qunsetenv("GUIDER_UNIT");
 }
@@ -422,7 +432,7 @@ void TstGuider::settingsDialogRoundTrip()
     in.kind = GpioRowCounter::available() ? QStringLiteral("gpio") : QStringLiteral("simulated");
     in.chip = QStringLiteral("gpiochip4"); in.line = 23; in.edge = QStringLiteral("both"); in.pull = QStringLiteral("down");
     in.debounceMs = 12; in.pulsesPerRow = 6; in.simulatedPeriodMs = 300;
-    CounterSettingsDialog dialog(in);
+    SettingsDialog dialog(in);
     const RowCounterConfig out = dialog.config();
     QCOMPARE(out.kind, in.kind);
     QCOMPARE(out.chip, in.chip);
@@ -434,7 +444,7 @@ void TstGuider::settingsDialogRoundTrip()
     QCOMPARE(out.simulatedPeriodMs, 300);
     QVERIFY(out.problem().isEmpty());
     // Defaults of a fresh config give a usable dialog: buttons only, and a GPIO pin is preset
-    CounterSettingsDialog fresh{RowCounterConfig()};
+    SettingsDialog fresh{RowCounterConfig()};
     QCOMPARE(fresh.config().kind, QStringLiteral("manual"));
     QVERIFY(fresh.config().line >= 0);
 }
@@ -443,7 +453,7 @@ void TstGuider::settingsDialogTestCountsPulses()
 {
     RowCounterConfig c;
     c.kind = QStringLiteral("simulated"); c.simulatedPeriodMs = 5; c.pulsesPerRow = 2;
-    CounterSettingsDialog dialog(c);
+    SettingsDialog dialog(c);
     dialog.show();
     QPushButton *test = nullptr;
     for (QPushButton *b : dialog.findChildren<QPushButton *>()) if (b->text() == QLatin1String("Test")) test = b;
@@ -467,7 +477,7 @@ void TstGuider::settingsDialogTestCountsPulses()
     bad.kind = QStringLiteral("gpio"); bad.chip = QStringLiteral("/nonexistent/gpiochip99"); bad.line = 5;
     if (GpioRowCounter::available())
     {
-        CounterSettingsDialog d2(bad);
+        SettingsDialog d2(bad);
         d2.show();
         QPushButton *t2 = nullptr;
         for (QPushButton *b : d2.findChildren<QPushButton *>()) if (b->text() == QLatin1String("Test")) t2 = b;
@@ -486,7 +496,7 @@ void TstGuider::settingsDialogFitsSmallScreen()
     applyGuideStyle(*qApp);
     RowCounterConfig c;
     c.kind = GpioRowCounter::available() ? QStringLiteral("gpio") : QStringLiteral("simulated");
-    CounterSettingsDialog dialog(c);
+    SettingsDialog dialog(c);
     dialog.resize(800, 480);
     dialog.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dialog));
@@ -540,6 +550,159 @@ void TstGuider::applyConfigReplacesCounter()
     QVERIFY(w.applyCounterConfig(RowCounterConfig(), false, &error));
     QVERIFY(!w.rowCounter());
     QCOMPARE(w.counterConfig().kind, QStringLiteral("manual"));
+}
+
+void TstGuider::themeNamesRoundTrip()
+{
+    for (ThemeChoice c : {ThemeChoice::System, ThemeChoice::Light, ThemeChoice::Dark})
+        QCOMPARE(themeChoiceFromName(themeChoiceName(c)), c);
+    QCOMPARE(themeChoiceFromName(QStringLiteral("nonsense")), ThemeChoice::System);
+    QCOMPARE(themeChoiceFromName(QString()), ThemeChoice::System);
+    const QColor mid = blendColors(Qt::black, Qt::white, 0.5);
+    QVERIFY(qAbs(mid.red() - 128) <= 1);
+    QCOMPARE(blendColors(Qt::red, Qt::blue, 0.0), QColor(Qt::red));
+    QCOMPARE(blendColors(Qt::red, Qt::blue, 1.0), QColor(Qt::blue));
+}
+
+void TstGuider::themeFollowsSystem()
+{
+    QCOMPARE(guideThemeChoice(), ThemeChoice::System);         // the default
+    QVERIFY(guideThemeIsDark());                               // the system says nothing: dark, the look guider always had
+    QSignalSpy changed(GuideThemeNotifier::instance(), &GuideThemeNotifier::changed);
+    pretendSystemColorScheme(Qt::ColorScheme::Light);
+    QVERIFY(!guideThemeIsDark());
+    QCOMPARE(guideTheme().window, lightGuideTheme().window);
+    QVERIFY(changed.count() >= 1);                              // following: restyled when the system switched
+    changed.clear();
+    pretendSystemColorScheme(Qt::ColorScheme::Dark);
+    QVERIFY(guideThemeIsDark());
+    QCOMPARE(guideTheme().window, darkGuideTheme().window);
+    QVERIFY(changed.count() >= 1);
+    // A fixed choice ignores the system and is not restyled by it
+    setGuideThemeChoice(ThemeChoice::Light);
+    changed.clear();
+    pretendSystemColorScheme(Qt::ColorScheme::Dark);
+    QVERIFY(!guideThemeIsDark());
+    QCOMPARE(changed.count(), 0);
+    setGuideThemeChoice(ThemeChoice::System);
+    QVERIFY(guideThemeIsDark());                                // back to following: the pretended dark
+    pretendSystemColorScheme(Qt::ColorScheme::Unknown, false);
+}
+
+void TstGuider::themeChoiceIsSavedAndApplied()
+{
+    qputenv("GUIDER_UNIT", "20");
+    setGuideThemeChoice(ThemeChoice::Dark);
+    QCOMPARE(guideThemeChoice(), ThemeChoice::Dark);
+    QCOMPARE(QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).value(QStringLiteral("theme")).toString(), QStringLiteral("dark"));
+    QVERIFY(qApp->styleSheet().contains(darkGuideTheme().window.name()));
+    setGuideThemeChoice(ThemeChoice::Light);
+    QVERIFY(qApp->styleSheet().contains(lightGuideTheme().window.name()));
+    QVERIFY(!qApp->styleSheet().contains(darkGuideTheme().window.name()));
+    // The rolling text repaints in the new colors
+    GuideWindow w;
+    QVERIFY(w.openFile(shirt()));
+    w.resize(1000, 600);
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    auto *view = w.findChild<StepView *>();
+    QCOMPARE(view->grab().toImage().pixelColor(2, view->height() - 2), lightGuideTheme().view);
+    setGuideThemeChoice(ThemeChoice::Dark);
+    QCOMPARE(view->grab().toImage().pixelColor(2, view->height() - 2), darkGuideTheme().view);
+    setGuideThemeChoice(ThemeChoice::System);
+    qunsetenv("GUIDER_UNIT");
+}
+
+void TstGuider::buttonsStandOutInEveryTheme_data()
+{
+    QTest::addColumn<int>("choice");
+    QTest::newRow("dark") << int(ThemeChoice::Dark);
+    QTest::newRow("light") << int(ThemeChoice::Light);
+}
+
+void TstGuider::buttonsStandOutInEveryTheme()
+{
+    QFETCH(int, choice);
+    qputenv("GUIDER_UNIT", "20");
+    setGuideThemeChoice(ThemeChoice(choice));
+    // A button must be easy to tell from the window around it: contrast of the button and its border against the dialog
+    auto luminance = [](const QColor &c) { return 0.2126 * c.redF() + 0.7152 * c.greenF() + 0.0722 * c.blueF(); };
+    const GuideTheme t = guideTheme();
+    QVERIFY2(qAbs(luminance(t.button) - luminance(t.window)) >= 0.06, "button color too close to the window");
+    QVERIFY2(qAbs(luminance(t.border) - luminance(t.window)) >= 0.3, "button border too faint");
+    QVERIFY2(qAbs(luminance(t.text) - luminance(t.window)) >= 0.6, "text contrast");
+    QVERIFY2(qAbs(luminance(t.text) - luminance(t.button)) >= 0.5, "button text contrast");
+    QVERIFY2(qAbs(luminance(t.accentText) - luminance(t.accent)) >= 0.4, "chosen choice contrast");
+    // and it is really painted that way: the Browse button in the open dialog differs from the dialog background
+    OpenDialog open({}, QString());
+    open.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&open));
+    QPushButton *browse = nullptr;
+    for (QPushButton *b : open.findChildren<QPushButton *>()) if (b->text().startsWith(QLatin1String("Browse"))) browse = b;
+    QVERIFY(browse);
+    const QImage image = open.grab().toImage();
+    const QPoint inside = browse->mapTo(&open, QPoint(browse->width() / 2, browse->height() - 6));
+    QCOMPARE(image.pixelColor(inside), t.button);
+    QCOMPARE(image.pixelColor(QPoint(2, inside.y())), t.window);                // the margin left of the button
+    qunsetenv("GUIDER_UNIT");
+    setGuideThemeChoice(ThemeChoice::System);
+}
+
+void TstGuider::settingsDialogChoosesTheme()
+{
+    setGuideThemeChoice(ThemeChoice::Light);
+    SettingsDialog dialog{RowCounterConfig()};
+    QCOMPARE(dialog.themeChoice(), ThemeChoice::Light);         // shows what is set now
+    dialog.show();
+    QPushButton *dark = nullptr;
+    for (QPushButton *b : dialog.findChildren<QPushButton *>()) if (b->text() == QLatin1String("Dark")) dark = b;
+    QVERIFY(dark);
+    dark->click();
+    QCOMPARE(dialog.themeChoice(), ThemeChoice::Dark);
+    QCOMPARE(guideThemeChoice(), ThemeChoice::Light);           // only OK applies it
+    setGuideThemeChoice(ThemeChoice::System);
+}
+
+void TstGuider::looksOfDialogs()
+{
+    // Pictures for a look by eye: GUIDER_TEST_SHOTS=dir
+    if (!qEnvironmentVariableIsSet("GUIDER_TEST_SHOTS"))
+        QSKIP("set GUIDER_TEST_SHOTS to a directory to save pictures");
+    const QString dir = qEnvironmentVariable("GUIDER_TEST_SHOTS");
+    qputenv("GUIDER_UNIT", "20");
+    QFile::copy(shirt(), dir + QStringLiteral("/recent.sm2d"));
+    for (ThemeChoice choice : {ThemeChoice::Dark, ThemeChoice::Light})
+    {
+        setGuideThemeChoice(choice);
+        const QString name = themeChoiceName(choice);
+        OpenDialog open({dir + QStringLiteral("/recent.sm2d"), shirt()}, dir);
+        open.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&open));
+        open.grab().save(dir + QStringLiteral("/open_") + name + QStringLiteral(".png"));
+        GuideWindow w;
+        QVERIFY(w.openFile(shirt()));
+        RowCounterConfig sim;
+        sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0;
+        w.applyCounterConfig(sim, false);
+        w.setRow(3);
+        w.resize(1280, 720);
+        w.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&w));
+        w.grab().save(dir + QStringLiteral("/window_") + name + QStringLiteral(".png"));
+        QFileDialog files(nullptr, QStringLiteral("Open"), dir);
+        files.setOption(QFileDialog::DontUseNativeDialog);
+        files.resize(900, 600);
+        files.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&files));
+        files.grab().save(dir + QStringLiteral("/files_") + name + QStringLiteral(".png"));
+        files.close();
+        SettingsDialog settings{RowCounterConfig()};
+        settings.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&settings));
+        settings.grab().save(dir + QStringLiteral("/settings_") + name + QStringLiteral(".png"));
+    }
+    setGuideThemeChoice(ThemeChoice::System);
+    qunsetenv("GUIDER_UNIT");
 }
 
 int main(int argc, char *argv[])

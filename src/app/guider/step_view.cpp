@@ -1,6 +1,8 @@
 #include "step_view.h"
 
 #include <QFont>
+
+#include "guide_theme.h"
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTextOption>
@@ -19,6 +21,7 @@ StepView::StepView(QWidget *parent)
     setAttribute(Qt::WA_OpaquePaintEvent);
     m_anim.setDuration(250);
     m_anim.setEasingCurve(QEasingCurve::OutCubic);
+    connect(GuideThemeNotifier::instance(), &GuideThemeNotifier::changed, this, [this]() { update(); });
     connect(&m_anim, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
         m_offset = v.toReal();
         update();
@@ -105,7 +108,8 @@ void StepView::resizeEvent(QResizeEvent *event)
 void StepView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
-    p.fillRect(rect(), QColor(0x10, 0x10, 0x10));
+    const GuideTheme theme = guideTheme();
+    p.fillRect(rect(), theme.view);
     p.setRenderHint(QPainter::TextAntialiasing);
     QTextOption option;
     option.setWrapMode(QTextOption::WordWrap);
@@ -123,12 +127,12 @@ void StepView::paintEvent(QPaintEvent *)
         if (it.current)
         {
             p.fillRect(box.adjusted(-width() * 0.02, -height() / 80.0, width() * 0.02, height() / 80.0),
-                       QColor(0x1d, 0x2c, 0x44));
+                       theme.stepBackground);
         }
         // Fade with distance from the middle.
         const qreal distance = qAbs(box.center().y() - height() / 2.0) / (height() / 2.0);
-        const int grey = it.current ? 255 : qBound(70, int(190 - 90 * distance), 190);
-        p.setPen(QColor(grey, grey, grey));
+        // The steps that are not current fade towards the background the further they are from the middle.
+        p.setPen(it.current ? theme.text : blendColors(theme.text, theme.view, qBound<qreal>(0.3, 0.3 + 0.4 * distance, 0.7)));
         p.drawText(box, it.text, option);
     }
 }

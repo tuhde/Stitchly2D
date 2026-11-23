@@ -1,11 +1,15 @@
 #include "guide_scale.h"
 
+#include "guide_theme.h"
+
 #include <QApplication>
 #include <QFont>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSettings>
 #include <QWidget>
+#include <QPair>
+#include <QList>
 #include <QtGlobal>
 
 QScreen *guideScreen()
@@ -50,19 +54,45 @@ void applyGuideStyle(QApplication &app)
     QFont font = app.font();
     font.setPixelSize(u);
     app.setFont(font);
-    // Touch targets: at least 2.4 units high; selection and scrollbars big enough for a finger.
-    app.setStyleSheet(QStringLiteral(
-        "QPushButton { min-height: %1px; padding: 0 %2px; border: 1px solid #555; border-radius: %3px;"
-        "  background: #2b2b2b; color: #eee; }"
-        "QPushButton:pressed { background: #4a6fa5; }"
-        "QPushButton:disabled { color: #777; }"
-        "QListWidget { background: #181818; color: #eee; border: 1px solid #444; }"
-        "QListWidget::item { min-height: %4px; padding: %5px; }"
-        "QListWidget::item:selected { background: #4a6fa5; color: white; }"
-        "QDialog, QFileDialog, QInputDialog, QMessageBox { background: #202020; color: #eee; }"
-        "QLabel { color: #eee; }"
-        "QLineEdit, QSpinBox, QComboBox, QTreeView, QListView { background: #181818; color: #eee; min-height: %6px; }"
-        "QScrollBar:vertical { width: %7px; background: #222; }"
-        "QScrollBar::handle:vertical { background: #666; min-height: %6px; border-radius: %3px; }")
-        .arg(u * 24 / 10).arg(u).arg(u / 2).arg(u * 24 / 10).arg(u / 3).arg(u * 2).arg(u * 3 / 2));
+
+    const GuideTheme t = guideTheme();
+    auto c = [](const QColor &color) { return color.name(); };
+    const QString sheet = QStringLiteral(
+        // Touch targets: at least 2.4 units high; borders strong enough to see where a button is.
+        "QWidget { color: %c_text; }"
+        "QDialog, QFileDialog, QInputDialog, QMessageBox, GuideWindow { background: %c_window; }"
+        "QLabel { color: %c_text; background: transparent; }"
+        "QLabel[status=\"ok\"] { color: %c_ok; }"
+        "QLabel[status=\"warning\"] { color: %c_warning; }"
+        "QLabel[status=\"error\"] { color: %c_error; }"
+        "QPushButton { min-height: %h_button; padding: 0 %pad; border: 2px solid %c_border;"
+        "  border-radius: %radius; background: %c_button; color: %c_text; }"
+        "QPushButton:pressed { background: %c_pressed; }"
+        "QPushButton:checked { background: %c_accent; color: %c_accentText; border-color: %c_text; }"
+        "QPushButton:disabled { color: %c_disabled; border-color: %c_disabled; }"
+        "QListWidget, QListView, QTreeView, QTableView { background: %c_view; color: %c_text; border: 1px solid %c_border; }"
+        "QListWidget::item { min-height: %h_button; padding: %pad3; border-bottom: 1px solid %c_disabled; }"
+        "QListWidget::item:selected, QListView::item:selected, QTreeView::item:selected { background: %c_accent; color: %c_accentText; }"
+        "QLineEdit, QSpinBox, QComboBox { background: %c_view; color: %c_text; border: 1px solid %c_border; min-height: %h_field; }"
+        "QHeaderView::section { background: %c_button; color: %c_text; border: 1px solid %c_border; padding: 2px; }"
+        "QScrollBar:vertical { width: %w_bar; background: %c_window; }"
+        "QScrollBar:horizontal { height: %w_bar; background: %c_window; }"
+        "QScrollBar::handle:vertical { background: %c_border; min-height: %h_field; border-radius: %radius; }"
+        "QScrollBar::handle:horizontal { background: %c_border; min-width: %h_field; border-radius: %radius; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }"
+        "#settingsScroll, #settingsScroll > QWidget > QWidget { background: %c_window; }");
+    QString out = sheet;
+    const QList<QPair<QString, QString>> values = {
+        {QStringLiteral("%c_text"), c(t.text)}, {QStringLiteral("%c_window"), c(t.window)},
+        {QStringLiteral("%c_ok"), c(t.ok)}, {QStringLiteral("%c_warning"), c(t.warning)}, {QStringLiteral("%c_error"), c(t.error)},
+        {QStringLiteral("%c_border"), c(t.border)}, {QStringLiteral("%c_button"), c(t.button)},
+        {QStringLiteral("%c_pressed"), c(t.buttonPressed)}, {QStringLiteral("%c_accentText"), c(t.accentText)},
+        {QStringLiteral("%c_accent"), c(t.accent)}, {QStringLiteral("%c_disabled"), c(t.textDisabled)},
+        {QStringLiteral("%c_view"), c(t.view)},
+        {QStringLiteral("%h_button"), QString::number(u * 24 / 10) + QStringLiteral("px")}, {QStringLiteral("%h_field"), QString::number(u * 2) + QStringLiteral("px")},
+        {QStringLiteral("%pad3"), QString::number(u / 3) + QStringLiteral("px")}, {QStringLiteral("%pad"), QString::number(u) + QStringLiteral("px")},
+        {QStringLiteral("%radius"), QString::number(u / 2) + QStringLiteral("px")}, {QStringLiteral("%w_bar"), QString::number(u * 3 / 2) + QStringLiteral("px")}};
+    for (const auto &v : values) out.replace(v.first, v.second);
+    app.setStyleSheet(out);
+    emit GuideThemeNotifier::instance()->changed();
 }

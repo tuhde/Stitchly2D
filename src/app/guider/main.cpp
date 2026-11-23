@@ -9,6 +9,7 @@
 
 #include "../../libs/stitchload/core/application_2d.h"
 #include "guide_scale.h"
+#include "guide_theme.h"
 #include "guide_window.h"
 #include "open_dialog.h"
 #include "row_counter.h"
@@ -90,6 +91,7 @@ int main(int argc, char *argv[])
         counter.save(settings);
     }
 
+    startFollowingSystemTheme();
     applyGuideStyle(app);
     GuideWindow window;
 

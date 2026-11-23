@@ -1,10 +1,11 @@
 // guider - fullscreen knitting guide. GPLv3, see LICENSE.
-#ifndef COUNTER_SETTINGS_DIALOG_H
-#define COUNTER_SETTINGS_DIALOG_H
+#ifndef SETTINGS_DIALOG_H
+#define SETTINGS_DIALOG_H
 
 #include <QButtonGroup>
 #include <QDialog>
 
+#include "guide_theme.h"
 #include "row_counter.h"
 
 class QLabel;
@@ -50,23 +51,25 @@ private:
 };
 
 /**
- * Touch-friendly settings of the row counter: which one, and for GPIO the chip, pin, edge, pull, debounce and
+ * Touch-friendly settings: the colors (system, light or dark), and the row counter: which one, and for GPIO the chip, pin, edge, pull, debounce and
  * pulses per row. "Test" listens with the values shown and counts pulses, to check the wiring.
  */
-class CounterSettingsDialog : public QDialog
+class SettingsDialog : public QDialog
 {
     Q_OBJECT
 public:
-    CounterSettingsDialog(const RowCounterConfig &config, QWidget *parent = nullptr);
-    ~CounterSettingsDialog() override;
+    SettingsDialog(const RowCounterConfig &config, QWidget *parent = nullptr);
+    ~SettingsDialog() override;
 
     RowCounterConfig config() const;
+    ThemeChoice      themeChoice() const;
 
 private:
     void updateVisibility();
     void toggleTest();
     void stopTest();
 
+    ChoiceRow   *m_theme = nullptr;
     ChoiceRow   *m_kind = nullptr;
     ChoiceRow   *m_chip = nullptr;
     StepperRow  *m_line = nullptr;

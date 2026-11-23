@@ -1,4 +1,4 @@
-#include "counter_settings_dialog.h"
+#include "settings_dialog.h"
 
 #include <QDir>
 #include <QHBoxLayout>
@@ -9,6 +9,7 @@
 
 #include "gpio_row_counter.h"
 #include "guide_scale.h"
+#include "guide_theme.h"
 
 StepperRow::StepperRow(const QString &label, int min, int max, int step, QWidget *parent)
     : QWidget(parent), m_min(min), m_max(max), m_step(step)
@@ -74,7 +75,6 @@ void ChoiceRow::addChoice(const QString &text, const QString &value, bool enable
     button->setEnabled(enabled);
     button->setFocusPolicy(Qt::NoFocus);
     button->setProperty("value", value);
-    button->setStyleSheet(QStringLiteral("QPushButton:checked { background: #4a6fa5; color: white; border-color: #9bb8e0; }"));
     m_box->layout()->addWidget(button);
     m_group.addButton(button);
     if (m_group.buttons().size() == 1 && enabled)
@@ -103,10 +103,10 @@ void ChoiceRow::setValue(const QString &value)
     m_group.buttons().last()->setChecked(true);
 }
 
-CounterSettingsDialog::CounterSettingsDialog(const RowCounterConfig &config, QWidget *parent)
+SettingsDialog::SettingsDialog(const RowCounterConfig &config, QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("Row counter"));
+    setWindowTitle(tr("Settings"));
     const int u = guideUnit(this);
     auto *outer = new QVBoxLayout(this);
 
@@ -114,12 +114,19 @@ CounterSettingsDialog::CounterSettingsDialog(const RowCounterConfig &config, QWi
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setStyleSheet(QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: #202020; }"));
+    scroll->setObjectName(QStringLiteral("settingsScroll"));
     auto *page = new QWidget(scroll);
     auto *layout = new QVBoxLayout(page);
     layout->setSpacing(u / 2);
     scroll->setWidget(page);
     outer->addWidget(scroll, 1);
+
+    m_theme = new ChoiceRow(tr("Colors"), page);
+    m_theme->addChoice(tr("System"), QStringLiteral("system"));
+    m_theme->addChoice(tr("Light"), QStringLiteral("light"));
+    m_theme->addChoice(tr("Dark"), QStringLiteral("dark"));
+    m_theme->setValue(themeChoiceName(guideThemeChoice()));
+    layout->addWidget(m_theme);
 
     m_kind = new ChoiceRow(tr("Row counter"), page);
     m_kind->addChoice(tr("Buttons only"), QStringLiteral("manual"));
@@ -129,7 +136,7 @@ CounterSettingsDialog::CounterSettingsDialog(const RowCounterConfig &config, QWi
     if (!GpioRowCounter::available())
     {
         auto *note = new QLabel(tr("This build has no GPIO support (libgpiod 2.x was not found)."), page);
-        note->setStyleSheet(QStringLiteral("color: #ffb36b;"));
+        setStatusStyle(note, QStringLiteral("warning"));
         layout->addWidget(note);
     }
 
@@ -195,17 +202,22 @@ CounterSettingsDialog::CounterSettingsDialog(const RowCounterConfig &config, QWi
     m_period->setValue(config.simulatedPeriodMs);
 
     connect(m_kind, &ChoiceRow::changed, this, [this]() { stopTest(); updateVisibility(); });
-    connect(m_testButton, &QPushButton::clicked, this, &CounterSettingsDialog::toggleTest);
+    connect(m_testButton, &QPushButton::clicked, this, &SettingsDialog::toggleTest);
     updateVisibility();
     resize(u * 46, u * 34);
 }
 
-CounterSettingsDialog::~CounterSettingsDialog()
+SettingsDialog::~SettingsDialog()
 {
     stopTest();       // gives the pin back before the guide starts its own counter
 }
 
-RowCounterConfig CounterSettingsDialog::config() const
+ThemeChoice SettingsDialog::themeChoice() const
+{
+    return themeChoiceFromName(m_theme->value());
+}
+
+RowCounterConfig SettingsDialog::config() const
 {
     RowCounterConfig c;
     c.kind = m_kind->value();
@@ -219,7 +231,7 @@ RowCounterConfig CounterSettingsDialog::config() const
     return c;
 }
 
-void CounterSettingsDialog::updateVisibility()
+void SettingsDialog::updateVisibility()
 {
     const QString kind = m_kind->value();
     m_gpioBox->setVisible(kind == QLatin1String("gpio"));
@@ -229,7 +241,7 @@ void CounterSettingsDialog::updateVisibility()
     m_testLabel->setVisible(kind != QLatin1String("manual"));
 }
 
-void CounterSettingsDialog::toggleTest()
+void SettingsDialog::toggleTest()
 {
     if (m_test)
     {
@@ -240,7 +252,7 @@ void CounterSettingsDialog::toggleTest()
     m_test = createRowCounter(config(), &error, this);
     if (!m_test || !m_test->start(&error))
     {
-        m_testLabel->setStyleSheet(QStringLiteral("color: #ff6b6b;"));
+        setStatusStyle(m_testLabel, QStringLiteral("error"));
         m_testLabel->setText(error);
         delete m_test;
         m_test = nullptr;
@@ -250,7 +262,7 @@ void CounterSettingsDialog::toggleTest()
     connect(m_test, &RowCounterSource::pulseCounted, this, [this]() { ++m_testPulses; });
     connect(m_test, &RowCounterSource::rowsStepped, this, [this](int d) { m_testRows += d; });
     auto refresh = [this]() {
-        m_testLabel->setStyleSheet(QStringLiteral("color: #7fbf7f;"));
+        setStatusStyle(m_testLabel, QStringLiteral("ok"));
         m_testLabel->setText(tr("Listening: %1 pulses, %2 rows").arg(m_testPulses).arg(m_testRows));
     };
     connect(m_test, &RowCounterSource::pulseCounted, this, refresh);
@@ -259,7 +271,7 @@ void CounterSettingsDialog::toggleTest()
     m_testButton->setText(tr("Stop test"));
 }
 
-void CounterSettingsDialog::stopTest()
+void SettingsDialog::stopTest()
 {
     if (m_test)
     {

@@ -28,6 +28,8 @@ OpenDialog::OpenDialog(const QStringList &recent, const QString &startDir, QWidg
         auto *item = new QListWidgetItem(QFileInfo(path).fileName() + QLatin1Char('\n') + QFileInfo(path).absolutePath(), m_list);
         item->setData(Qt::UserRole, path);
     }
+    m_list->setTextElideMode(Qt::ElideMiddle);                    // long folder names: no sideways scrolling
+    m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     layout->addWidget(m_list, 1);
     connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) { accepted(m_list->row(item)); });
 
