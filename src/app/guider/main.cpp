@@ -53,12 +53,12 @@ int main(int argc, char *argv[])
     {
         const QStringList wh = parser.value(size).split(QLatin1Char('x'));
         window.resize(wh.size() == 2 ? QSize(wh[0].toInt(), wh[1].toInt()) : QSize(1280, 720));
-        window.show();
+        window.showOnSavedScreen(false);
     }
     else
     {
         window.setCursor(Qt::BlankCursor);   // touch screen: no pointer
-        window.showFullScreen();
+        window.showOnSavedScreen(true);
     }
 
     if (!path.isEmpty())

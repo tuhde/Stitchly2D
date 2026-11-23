@@ -7,6 +7,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
+#include <QScreen>
+#include <QWindow>
 #include <QDialog>
 #include <QPushButton>
 #include <QSettings>
@@ -106,8 +108,9 @@ QStringList GuideWindow::recentFiles() const
     return settings().value(QStringLiteral("recent")).toStringList();
 }
 
-bool GuideWindow::openFile(const QString &path, QString *error)
+bool GuideWindow::openFile(const QString &file, QString *error)
 {
+    const QString path = QFileInfo(file).absoluteFilePath();   // the saved "last file" must work from any working directory
     QApplication::setOverrideCursor(Qt::WaitCursor);
     m_title->setText(tr("Loading..."));
     QApplication::processEvents();
@@ -312,4 +315,45 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
         default:
             QWidget::keyPressEvent(event);
     }
+}
+
+void GuideWindow::showOnSavedScreen(bool fullscreen)
+{
+    QScreen *screen = guideScreen();
+    // Fullscreen goes to the screen the window is on, so put the window there before it is shown.
+    create();
+    windowHandle()->setScreen(screen);
+    const QRect area = screen->availableGeometry();
+    QRect target(QPoint(), size());
+    target.moveCenter(area.center());
+    if (!area.contains(target))
+    {
+        target = QRect(area.topLeft(), size().boundedTo(area.size()));
+    }
+    setGeometry(target);
+    if (fullscreen)
+    {
+        showFullScreen();
+    }
+    else
+    {
+        show();
+    }
+}
+
+void GuideWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // Remember every move to another monitor, not only the one it is on when closed.
+    if (windowHandle() && !m_screenWatched)
+    {
+        m_screenWatched = true;
+        connect(windowHandle(), &QWindow::screenChanged, this, [](QScreen *screen) { saveGuideScreen(screen); });
+    }
+}
+
+void GuideWindow::closeEvent(QCloseEvent *event)
+{
+    saveGuideScreen(screen());
+    QWidget::closeEvent(event);
 }

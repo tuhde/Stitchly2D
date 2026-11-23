@@ -4,8 +4,31 @@
 #include <QFont>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QSettings>
 #include <QWidget>
 #include <QtGlobal>
+
+QScreen *guideScreen()
+{
+    const QString saved = QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).value(QStringLiteral("screen")).toString();
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (QScreen *screen : screens)
+    {
+        if (!saved.isEmpty() && screen->name() == saved)
+        {
+            return screen;
+        }
+    }
+    return screens.isEmpty() ? QGuiApplication::primaryScreen() : screens.first();
+}
+
+void saveGuideScreen(const QScreen *screen)
+{
+    if (screen)
+    {
+        QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).setValue(QStringLiteral("screen"), screen->name());
+    }
+}
 
 int guideUnit(const QWidget *widget)
 {
@@ -16,7 +39,7 @@ int guideUnit(const QWidget *widget)
     {
         return forced;
     }
-    const QScreen *screen = widget ? widget->screen() : QGuiApplication::primaryScreen();
+    const QScreen *screen = widget ? widget->screen() : guideScreen();
     const int height = screen ? screen->size().height() : 1080;
     return qMax(9, height / 54);
 }

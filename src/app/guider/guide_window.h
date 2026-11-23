@@ -7,6 +7,7 @@
 #include "../../libs/stitchload/core/knit_job.h"
 
 class QLabel;
+class QScreen;
 class QPushButton;
 class StepView;
 
@@ -29,6 +30,9 @@ public:
     const KnitJob &job() const { return m_job; }
     QStringList recentFiles() const;
 
+    /** Shows the window on the saved screen (default: monitor 0), fullscreen or as a normal window. */
+    void showOnSavedScreen(bool fullscreen);
+
 public slots:
     void setPiece(int piece);
     void setRow(int row);                 //!< clamped to 0 .. rowCount + 1
@@ -40,6 +44,8 @@ public slots:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void updateView();
@@ -49,6 +55,7 @@ private:
     KnitJob       m_job;
     int           m_piece = 0;
     int           m_row = 0;
+    bool          m_screenWatched = false;
     QLabel       *m_title = nullptr;
     QLabel       *m_rowLabel = nullptr;
     StepView     *m_view = nullptr;

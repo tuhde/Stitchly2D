@@ -11,6 +11,13 @@ class QApplication;
  */
 int guideUnit(const QWidget *widget = nullptr);
 
+class QScreen;
+
+/** The screen guider starts on: the one it was last on (saved by name), else monitor 0 (the first screen). */
+QScreen *guideScreen();
+/** Remembers the screen for the next start. */
+void saveGuideScreen(const QScreen *screen);
+
 /** Sets the application font and a stylesheet (buttons, lists, dialogs) from guideUnit(). Call again after a screen change. */
 void applyGuideStyle(QApplication &app);
 
