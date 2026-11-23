@@ -336,6 +336,9 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
         case Qt::Key_Home:
             setRow(0);
             break;
+        case Qt::Key_End:
+            setRow(rowCount() + 1);           // the bind-off block
+            break;
         case Qt::Key_O:
             chooseFile();
             break;

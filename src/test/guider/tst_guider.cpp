@@ -169,6 +169,15 @@ void TstGuider::pageKeysJumpByBlock()
     w.setRow(2);
     QTest::keyClick(&w, Qt::Key_PageDown);
     QVERIFY(w.row() > 2);
+    // End jumps to the bind-off block, Home back to the cast-on
+    w.setRow(5);
+    QTest::keyClick(&w, Qt::Key_End);
+    QCOMPARE(w.row(), w.rowCount() + 1);
+    QVERIFY(stitchcore::stepsForRow(steps, w.row()).contains(steps.size() - 1));
+    QTest::keyClick(&w, Qt::Key_End);                 // already there
+    QCOMPARE(w.row(), w.rowCount() + 1);
+    QTest::keyClick(&w, Qt::Key_Home);
+    QCOMPARE(w.row(), 0);
     // The arrow keys still move by one row
     w.setRow(0);
     QTest::keyClick(&w, Qt::Key_Down);
