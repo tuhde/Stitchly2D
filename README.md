@@ -61,7 +61,7 @@ pattern. Pieces are turned so their grainline is vertical. `--cli` needs no disp
 
 ## Guider (knitting guide)
 
-`guider` is a second program for a Raspberry Pi with a touch screen at the knitting machine. It opens a `.stitchly` or `.sm2d` file, shows the instructions as large rolling text, and follows a row counter (touch buttons, a GPIO sensor or a simulated one). Run `guider pattern.stitchly` (`--windowed` for a window, `--help` for all options). Keys: arrows/Space/Backspace row by row, Page Up/Down by block, Home/End first row and bind-off, O open, P piece, G go to row, S settings. Setup on the Pi (build, GPIO, autostart): [docs/GUIDER_PI.md](docs/GUIDER_PI.md); design: [docs/GUIDE_PLAN.md](docs/GUIDE_PLAN.md).
+`guider` is a second program for a Raspberry Pi with a touch screen at the knitting machine. It opens a `.stitchly` or `.sm2d` file, shows the instructions as large rolling text, and follows a row counter (touch buttons, a GPIO sensor or a simulated one). Run `guider pattern.stitchly` (`--windowed` for a window, `--lang de_DE` for German, `--help` for all options). Keys: arrows/Space/Backspace row by row, Page Up/Down by block, Home/End first row and bind-off, O open, P piece, G go to row, S settings. Setup on the Pi (build, GPIO, autostart): [docs/GUIDER_PI.md](docs/GUIDER_PI.md); design: [docs/GUIDE_PLAN.md](docs/GUIDE_PLAN.md).
 
 ## Languages
 

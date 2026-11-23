@@ -279,6 +279,140 @@
     </message>
 </context>
 <context>
+    <name>GpioRowCounter</name>
+    <message>
+        <source>GPIO %1 line %2</source>
+        <translation>GPIO %1 Leitung %2</translation>
+    </message>
+    <message>
+        <source>This build has no GPIO support (libgpiod 2.x was not found).</source>
+        <translation>Diese Version hat keine GPIO-Unterstützung (libgpiod 2.x wurde nicht gefunden).</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>no permission for %1 (is the user in the gpio group?)</source>
+        <translation>keine Berechtigung für %1 (ist der Benutzer in der Gruppe gpio?)</translation>
+    </message>
+    <message>
+        <source>cannot open %1 (%2)</source>
+        <translation>%1 kann nicht geöffnet werden (%2)</translation>
+    </message>
+    <message>
+        <source>the line is already in use by another program</source>
+        <translation>die Leitung wird schon von einem anderen Programm benutzt</translation>
+    </message>
+    <message>
+        <source>this chip has no such line</source>
+        <translation>dieser Chip hat keine solche Leitung</translation>
+    </message>
+    <message>
+        <source>no permission (is the user in the gpio group?)</source>
+        <translation>keine Berechtigung (ist der Benutzer in der Gruppe gpio?)</translation>
+    </message>
+    <message>
+        <source>cannot request the line (%1)</source>
+        <translation>die Leitung kann nicht angefordert werden (%1)</translation>
+    </message>
+    <message>
+        <source>%1: reading failed (%2)</source>
+        <translation>%1: Lesen fehlgeschlagen (%2)</translation>
+    </message>
+</context>
+<context>
+    <name>GuideWindow</name>
+    <message>
+        <source>guider</source>
+        <translation>Strickführer</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Öffnen</translation>
+    </message>
+    <message>
+        <source>Piece</source>
+        <translation>Teil</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>Einstellungen</translation>
+    </message>
+    <message>
+        <source>&lt; Previous</source>
+        <translation>&lt; Zurück</translation>
+    </message>
+    <message>
+        <source>Next &gt;</source>
+        <translation>Weiter &gt;</translation>
+    </message>
+    <message>
+        <source>Go to row...</source>
+        <translation>Zu Reihe...</translation>
+    </message>
+    <message>
+        <source>Loading...</source>
+        <translation>Wird geladen...</translation>
+    </message>
+    <message>
+        <source>The pattern has no pieces.</source>
+        <translation>Das Schnittmuster hat keine Teile.</translation>
+    </message>
+    <message>
+        <source>no stitches</source>
+        <translation>keine Maschen</translation>
+    </message>
+    <message>
+        <source>Cast on</source>
+        <translation>Anschlag</translation>
+    </message>
+    <message>
+        <source>Bind off</source>
+        <translation>Abketten</translation>
+    </message>
+    <message>
+        <source>Round %1 / %2</source>
+        <translation>Runde %1 / %2</translation>
+    </message>
+    <message>
+        <source>Row %1 / %2</source>
+        <translation>Reihe %1 / %2</translation>
+    </message>
+    <message>
+        <source>No pattern open</source>
+        <translation>Kein Schnittmuster geöffnet</translation>
+    </message>
+    <message>
+        <source>Could not open: %1</source>
+        <translation>Konnte nicht geöffnet werden: %1</translation>
+    </message>
+    <message>
+        <source>%1  (%2 rows)</source>
+        <translation>%1  (%2 Reihen)</translation>
+    </message>
+    <message>
+        <source>%1  (no stitches)</source>
+        <translation>%1  (keine Maschen)</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Go to row</source>
+        <translation>Zu Reihe</translation>
+    </message>
+    <message>
+        <source>Row (0 = cast on):</source>
+        <translation>Reihe (0 = Anschlag):</translation>
+    </message>
+    <message>
+        <source>counter stopped</source>
+        <translation>Zähler gestoppt</translation>
+    </message>
+</context>
+<context>
     <name>Instructions</name>
     <message>
         <source>round</source>
@@ -1411,6 +1545,29 @@ Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
     </message>
 </context>
 <context>
+    <name>OpenDialog</name>
+    <message>
+        <source>Open</source>
+        <translation>Öffnen</translation>
+    </message>
+    <message>
+        <source>Choose a project (.stitchly) or pattern (.sm2d)</source>
+        <translation>Projekt (.stitchly) oder Schnittmuster (.sm2d) wählen</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>Durchsuchen...</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Knitting projects and patterns (*.stitchly *.sm2d *.val);;All files (*)</source>
+        <translation>Strickprojekte und Schnittmuster (*.stitchly *.sm2d *.val);;Alle Dateien (*)</translation>
+    </message>
+</context>
+<context>
     <name>Passes</name>
     <message>
         <source>main</source>
@@ -1513,6 +1670,168 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>Claude wants to write the row table</source>
         <translation>Claude möchte die Reihentabelle schreiben</translation>
+    </message>
+    <message>
+        <source>Unknown row counter &quot;%1&quot; (use manual, gpio or simulated).</source>
+        <translation>Unbekannter Reihenzähler „%1“ (manual, gpio oder simulated verwenden).</translation>
+    </message>
+    <message>
+        <source>Pulses per pass must be 1 or more.</source>
+        <translation>Impulse pro Durchgang müssen 1 oder mehr sein.</translation>
+    </message>
+    <message>
+        <source>The GPIO counter needs a line (pin number).</source>
+        <translation>Der GPIO-Zähler braucht eine Leitung (Pin-Nummer).</translation>
+    </message>
+    <message>
+        <source>GPIO edge must be rising, falling or both.</source>
+        <translation>Die GPIO-Flanke muss rising, falling oder both sein.</translation>
+    </message>
+    <message>
+        <source>GPIO pull must be up, down or none.</source>
+        <translation>Der GPIO-Pull muss up, down oder none sein.</translation>
+    </message>
+    <message>
+        <source>GPIO debounce must be 0 or more.</source>
+        <translation>Die GPIO-Entprellzeit muss 0 oder mehr sein.</translation>
+    </message>
+    <message>
+        <source>The simulated period must be 0 or more.</source>
+        <translation>Die simulierte Periode muss 0 oder mehr sein.</translation>
+    </message>
+    <message>
+        <source>GPIO %1 line %2</source>
+        <translation>GPIO %1 Leitung %2</translation>
+    </message>
+    <message>
+        <source>simulated</source>
+        <translation>simuliert</translation>
+    </message>
+    <message>
+        <source>buttons</source>
+        <translation>Tasten</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDialog</name>
+    <message>
+        <source>Settings</source>
+        <translation>Einstellungen</translation>
+    </message>
+    <message>
+        <source>Colors</source>
+        <translation>Farben</translation>
+    </message>
+    <message>
+        <source>System</source>
+        <translation>System</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>Hell</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>Dunkel</translation>
+    </message>
+    <message>
+        <source>Row counter</source>
+        <translation>Reihenzähler</translation>
+    </message>
+    <message>
+        <source>Buttons only</source>
+        <translation>Nur Tasten</translation>
+    </message>
+    <message>
+        <source>GPIO sensor</source>
+        <translation>GPIO-Sensor</translation>
+    </message>
+    <message>
+        <source>Simulated</source>
+        <translation>Simuliert</translation>
+    </message>
+    <message>
+        <source>This build has no GPIO support (libgpiod 2.x was not found).</source>
+        <translation>Diese Version hat keine GPIO-Unterstützung (libgpiod 2.x wurde nicht gefunden).</translation>
+    </message>
+    <message>
+        <source>GPIO chip</source>
+        <translation>GPIO-Chip</translation>
+    </message>
+    <message>
+        <source>Pin (BCM number)</source>
+        <translation>Pin (BCM-Nummer)</translation>
+    </message>
+    <message>
+        <source>One pulse is the</source>
+        <translation>Ein Impuls ist die</translation>
+    </message>
+    <message>
+        <source>falling edge</source>
+        <translation>fallende Flanke</translation>
+    </message>
+    <message>
+        <source>rising edge</source>
+        <translation>steigende Flanke</translation>
+    </message>
+    <message>
+        <source>both edges</source>
+        <translation>beide Flanken</translation>
+    </message>
+    <message>
+        <source>Pull resistor</source>
+        <translation>Pull-Widerstand</translation>
+    </message>
+    <message>
+        <source>up</source>
+        <translation>hoch</translation>
+    </message>
+    <message>
+        <source>down</source>
+        <translation>runter</translation>
+    </message>
+    <message>
+        <source>none</source>
+        <translation>keiner</translation>
+    </message>
+    <message>
+        <source>Debounce (ms)</source>
+        <translation>Entprellzeit (ms)</translation>
+    </message>
+    <message>
+        <source>One pulse every (ms, 0 = never)</source>
+        <translation>Ein Impuls alle (ms, 0 = nie)</translation>
+    </message>
+    <message>
+        <source>Pulses per pass</source>
+        <translation>Impulse pro Durchgang</translation>
+    </message>
+    <message>
+        <source>Test</source>
+        <translation>Test</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Listening: %1 pulses, %2 passes</source>
+        <translation>Lauscht: %1 Impulse, %2 Durchgänge</translation>
+    </message>
+    <message>
+        <source>Stop test</source>
+        <translation>Test beenden</translation>
+    </message>
+</context>
+<context>
+    <name>SimulatedRowCounter</name>
+    <message>
+        <source>simulated</source>
+        <translation>simuliert</translation>
     </message>
 </context>
 <context>
@@ -1970,6 +2289,70 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>With --cli: knit all pieces flat, round, circular_machine, double_bed_machine or double_bed_flat.</source>
         <translation>Mit --cli: alle Teile flach (flat), in Runden (round), auf der Rundstrickmaschine (circular_machine), im Schlauch auf der Doppelbettmaschine (double_bed_machine) oder flach auf der Doppelbettmaschine (double_bed_flat) stricken.</translation>
+    </message>
+    <message>
+        <source>Shows knitting instructions row by row.</source>
+        <translation>Zeigt die Strickanleitung Reihe für Reihe.</translation>
+    </message>
+    <message>
+        <source>Project (.stitchly) or pattern (.sm2d); default: the last one used.</source>
+        <translation>Projekt (.stitchly) oder Schnittmuster (.sm2d); Standard: das zuletzt benutzte.</translation>
+    </message>
+    <message>
+        <source>Do not start fullscreen.</source>
+        <translation>Nicht im Vollbild starten.</translation>
+    </message>
+    <message>
+        <source>Start with this piece.</source>
+        <translation>Mit diesem Teil beginnen.</translation>
+    </message>
+    <message>
+        <source>Save a picture of the window to this file and quit (for tests).</source>
+        <translation>Ein Bild des Fensters in diese Datei speichern und beenden (für Tests).</translation>
+    </message>
+    <message>
+        <source>Window size WxH with --windowed.</source>
+        <translation>Fenstergröße BxH mit --windowed.</translation>
+    </message>
+    <message>
+        <source>Start at this row (0 = cast on).</source>
+        <translation>Bei dieser Reihe beginnen (0 = Anschlag).</translation>
+    </message>
+    <message>
+        <source>Row counter: manual (buttons only), gpio or simulated. Saved for the next start.</source>
+        <translation>Reihenzähler: manual (nur Tasten), gpio oder simulated. Wird für den nächsten Start gespeichert.</translation>
+    </message>
+    <message>
+        <source>Language for this run, for example de_DE (default: the system language).</source>
+        <translation>Sprache für diesen Aufruf, zum Beispiel de_DE (Standard: die Systemsprache).</translation>
+    </message>
+    <message>
+        <source>GPIO chip (default gpiochip0).</source>
+        <translation>GPIO-Chip (Standard gpiochip0).</translation>
+    </message>
+    <message>
+        <source>GPIO line (BCM pin number) of the sensor.</source>
+        <translation>GPIO-Leitung (BCM-Pin-Nummer) des Sensors.</translation>
+    </message>
+    <message>
+        <source>Which edge is one pulse: rising, falling (default) or both.</source>
+        <translation>Welche Flanke ein Impuls ist: rising, falling (Standard) oder both.</translation>
+    </message>
+    <message>
+        <source>Internal pull resistor: up (default), down or none.</source>
+        <translation>Interner Pull-Widerstand: up (Standard), down oder none.</translation>
+    </message>
+    <message>
+        <source>Ignore changes shorter than this many ms (default 5, 0 = off).</source>
+        <translation>Änderungen kürzer als so viele ms ignorieren (Standard 5, 0 = aus).</translation>
+    </message>
+    <message>
+        <source>Sensor pulses that make one carriage pass (default 1). The guide knows how many passes make a row.</source>
+        <translation>Sensorimpulse für einen Schlittendurchgang (Standard 1). Der Führer weiß, wie viele Durchgänge eine Reihe ergeben.</translation>
+    </message>
+    <message>
+        <source>Simulated counter: one pulse every this many ms (default 1000, 0 = never).</source>
+        <translation>Simulierter Zähler: ein Impuls alle so viele ms (Standard 1000, 0 = nie).</translation>
     </message>
 </context>
 </TS>

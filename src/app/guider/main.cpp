@@ -42,6 +42,8 @@ int main(int argc, char *argv[])
     QCommandLineOption counterOption(QStringLiteral("counter"),
         QCoreApplication::translate("main", "Row counter: manual (buttons only), gpio or simulated. Saved for the next start."),
         QStringLiteral("kind"));
+    QCommandLineOption langOption(QStringLiteral("lang"),
+        QCoreApplication::translate("main", "Language for this run, for example de_DE (default: the system language)."), QStringLiteral("locale"));
     QCommandLineOption chipOption(QStringLiteral("gpio-chip"), QCoreApplication::translate("main", "GPIO chip (default gpiochip0)."),
                                   QStringLiteral("chip"));
     QCommandLineOption lineOption(QStringLiteral("gpio-line"), QCoreApplication::translate("main", "GPIO line (BCM pin number) of the sensor."),
@@ -57,9 +59,10 @@ int main(int argc, char *argv[])
         QStringLiteral("n"));
     QCommandLineOption simOption(QStringLiteral("sim-period"),
         QCoreApplication::translate("main", "Simulated counter: one pulse every this many ms (default 1000, 0 = never)."), QStringLiteral("ms"));
-    parser.addOptions({windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
+    parser.addOptions({langOption, windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
                        debounceOption, pulsesOption, simOption});
     parser.process(app);
+    if (parser.isSet(langOption)) app.loadTranslations(parser.value(langOption));
 
     // Row counter: what was used last, changed by the options given now (and saved again).
     QSettings settings(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));

@@ -16,6 +16,9 @@ UI_DIR = uic
 
 include(guider.pri)
 
+# German etc.: the same share/translations/stitchly2d_<locale>.ts as the editor (guider's strings are collected there too)
+include(../stitchly2d/translations.pri)
+
 include(../stitchly2d/warnings.pri)
 
 # precompiled headers clash with the BUILD_REVISION define, thus disable here

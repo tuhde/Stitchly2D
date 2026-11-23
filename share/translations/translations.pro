@@ -20,3 +20,7 @@ HEADERS += \
     $$files($$PWD/../../src/libs/stitchcore/*.h) \
     $$files($$PWD/../../src/libs/stitchload/core/*.h) \
     $$files($$PWD/../../src/libs/stitchload/xml/*.h)
+
+# guider (its own program, same translation files)
+SOURCES += $$files($$PWD/../../src/app/guider/*.cpp)
+HEADERS += $$files($$PWD/../../src/app/guider/*.h)
