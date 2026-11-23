@@ -7,7 +7,10 @@
 #include <QTemporaryDir>
 
 #include "../../app/guider/guide_scale.h"
+#include "../../app/guider/gpio_row_counter.h"
 #include "../../app/guider/guide_window.h"
+#include "../../app/guider/row_counter.h"
+#include "../../app/guider/simulated_row_counter.h"
 #include "../../app/guider/step_view.h"
 #include "../../libs/stitchload/core/application_2d.h"
 
@@ -37,6 +40,14 @@ private slots:
     void layoutFitsScreens();
     void startsOnFirstScreenByDefault();
     void savedScreenIsUsed();
+    void pulsesBecomeRows();
+    void pulsesBecomeRowsBackwards();
+    void configIsChecked_data();
+    void configIsChecked();
+    void configIsSaved();
+    void simulatedCounterEmitsRows();
+    void windowFollowsCounter();
+    void gpioFailsCleanly();
 };
 
 void TstGuider::init()
@@ -214,6 +225,153 @@ void TstGuider::savedScreenIsUsed()
     w.close();
     QCOMPARE(QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).value(QStringLiteral("screen")).toString(),
              screen->name());
+}
+
+void TstGuider::pulsesBecomeRows()
+{
+    PulseCounter c(3);
+    QCOMPARE(c.add(), 0);
+    QCOMPARE(c.add(), 0);
+    QCOMPARE(c.add(), 1);
+    QCOMPARE(c.pending(), 0);
+    QCOMPARE(c.add(7), 2);                 // 7 pulses = 2 rows and 1 left over
+    QCOMPARE(c.pending(), 1);
+    PulseCounter one(0);                   // nonsense is treated as 1
+    QCOMPARE(one.pulsesPerRow(), 1);
+    QCOMPARE(one.add(), 1);
+}
+
+void TstGuider::pulsesBecomeRowsBackwards()
+{
+    PulseCounter c(4);
+    c.add(2);
+    QCOMPARE(c.add(-2), 0);                // turning round takes back what was counted
+    QCOMPARE(c.pending(), 0);
+    QCOMPARE(c.add(-4), -1);
+    QCOMPARE(c.add(-3), 0);
+    QCOMPARE(c.add(-1), -1);
+}
+
+void TstGuider::configIsChecked_data()
+{
+    QTest::addColumn<QString>("kind");
+    QTest::addColumn<int>("line");
+    QTest::addColumn<QString>("edge");
+    QTest::addColumn<int>("pulses");
+    QTest::addColumn<bool>("valid");
+    QTest::newRow("buttons") << "manual" << -1 << "falling" << 1 << true;
+    QTest::newRow("gpio ok") << "gpio" << 17 << "falling" << 1 << true;
+    QTest::newRow("gpio both edges") << "gpio" << 4 << "both" << 2 << true;
+    QTest::newRow("gpio without line") << "gpio" << -1 << "falling" << 1 << false;
+    QTest::newRow("gpio bad edge") << "gpio" << 17 << "sideways" << 1 << false;
+    QTest::newRow("no pulses per row") << "gpio" << 17 << "rising" << 0 << false;
+    QTest::newRow("unknown kind") << "usb" << 17 << "rising" << 1 << false;
+    QTest::newRow("simulated") << "simulated" << -1 << "falling" << 1 << true;
+}
+
+void TstGuider::configIsChecked()
+{
+    QFETCH(QString, kind); QFETCH(int, line); QFETCH(QString, edge); QFETCH(int, pulses); QFETCH(bool, valid);
+    RowCounterConfig c;
+    c.kind = kind; c.line = line; c.edge = edge; c.pulsesPerRow = pulses;
+    QCOMPARE(c.problem().isEmpty(), valid);
+    QString error;
+    RowCounterSource *source = createRowCounter(c, &error);
+    QCOMPARE(error.isEmpty(), valid);
+    QCOMPARE(source != nullptr, valid && kind != QLatin1String("manual"));
+    delete source;
+}
+
+void TstGuider::configIsSaved()
+{
+    RowCounterConfig c;
+    c.kind = QStringLiteral("gpio"); c.chip = QStringLiteral("gpiochip4"); c.line = 23; c.edge = QStringLiteral("both");
+    c.pull = QStringLiteral("down"); c.debounceMs = 12; c.pulsesPerRow = 6;
+    QSettings s(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));
+    c.save(s);
+    RowCounterConfig back;
+    back.load(s);
+    QCOMPARE(back.kind, c.kind);
+    QCOMPARE(back.chip, c.chip);
+    QCOMPARE(back.line, 23);
+    QCOMPARE(back.edge, c.edge);
+    QCOMPARE(back.pull, c.pull);
+    QCOMPARE(back.debounceMs, 12);
+    QCOMPARE(back.pulsesPerRow, 6);
+    RowCounterConfig fresh;
+    s.clear();
+    fresh.load(s);
+    QCOMPARE(fresh.kind, QStringLiteral("manual"));        // nothing saved: buttons only
+}
+
+void TstGuider::simulatedCounterEmitsRows()
+{
+    SimulatedRowCounter c(0, 2);
+    QSignalSpy rows(&c, &RowCounterSource::rowsStepped);
+    c.injectPulse();                                       // not running yet: ignored
+    QVERIFY(c.start());
+    QCOMPARE(c.state(), RowCounterSource::State::Running);
+    c.injectPulse();
+    QCOMPARE(rows.count(), 0);
+    c.injectPulse();
+    QCOMPARE(rows.count(), 1);
+    QCOMPARE(rows.first().first().toInt(), 1);
+    c.injectPulse(-1);
+    c.injectPulse(-1);
+    QCOMPARE(rows.last().first().toInt(), -1);
+    c.stop();
+    QCOMPARE(c.state(), RowCounterSource::State::Stopped);
+
+    SimulatedRowCounter timed(5, 1);                       // by itself, every 5 ms
+    QSignalSpy timedRows(&timed, &RowCounterSource::rowsStepped);
+    QVERIFY(timed.start());
+    QTRY_VERIFY_WITH_TIMEOUT(timedRows.count() >= 3, 2000);
+}
+
+void TstGuider::windowFollowsCounter()
+{
+    GuideWindow w;
+    auto *counter = new SimulatedRowCounter(0, 1);
+    w.setRowCounter(counter);                              // before a pattern is open: nothing to move
+    QVERIFY(counter->start());
+    counter->injectPulse();
+    QCOMPARE(w.row(), 0);
+    QVERIFY(w.openFile(shirt()));
+    counter->injectPulse();
+    counter->injectPulse();
+    QCOMPARE(w.row(), 2);
+    counter->injectPulse(-1);
+    QCOMPARE(w.row(), 1);
+    w.nextRow();                                           // the buttons still work and the counter carries on from there
+    counter->injectPulse();
+    QCOMPARE(w.row(), 3);
+    for (int i = 0; i < 5; ++i) counter->injectPulse(-1);  // never below the cast-on
+    QCOMPARE(w.row(), 0);
+    w.setRowCounter(nullptr);
+    QVERIFY(!w.rowCounter());
+}
+
+void TstGuider::gpioFailsCleanly()
+{
+    RowCounterConfig c;
+    c.kind = QStringLiteral("gpio");
+    c.chip = QStringLiteral("/nonexistent/gpiochip99");
+    c.line = 17;
+    QString error;
+    RowCounterSource *source = createRowCounter(c, &error);
+    QVERIFY(source);
+    QSignalSpy states(source, &RowCounterSource::stateChanged);
+    QVERIFY(!source->start(&error));
+    QVERIFY(!error.isEmpty());
+    QCOMPARE(source->state(), RowCounterSource::State::Error);
+    QCOMPARE(states.count(), 1);
+    // The window shows the problem and keeps working
+    GuideWindow w;
+    w.setRowCounter(source);
+    QVERIFY(w.openFile(shirt()));
+    w.nextRow();
+    QCOMPARE(w.row(), 1);
+    qInfo() << "GPIO support in this build:" << GpioRowCounter::available();
 }
 
 int main(int argc, char *argv[])

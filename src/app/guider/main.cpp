@@ -11,6 +11,7 @@
 #include "guide_scale.h"
 #include "guide_window.h"
 #include "open_dialog.h"
+#include "row_counter.h"
 
 int main(int argc, char *argv[])
 {
@@ -37,8 +38,57 @@ int main(int argc, char *argv[])
     QCommandLineOption size(QStringLiteral("size"), QCoreApplication::translate("main", "Window size WxH with --windowed."),
                             QStringLiteral("WxH"));
     QCommandLineOption rowOption(QStringLiteral("row"), QCoreApplication::translate("main", "Start at this row (0 = cast on)."), QStringLiteral("n"));
-    parser.addOptions({windowed, piece, rowOption, shot, size});
+    QCommandLineOption counterOption(QStringLiteral("counter"),
+        QCoreApplication::translate("main", "Row counter: manual (buttons only), gpio or simulated. Saved for the next start."),
+        QStringLiteral("kind"));
+    QCommandLineOption chipOption(QStringLiteral("gpio-chip"), QCoreApplication::translate("main", "GPIO chip (default gpiochip0)."),
+                                  QStringLiteral("chip"));
+    QCommandLineOption lineOption(QStringLiteral("gpio-line"), QCoreApplication::translate("main", "GPIO line (BCM pin number) of the sensor."),
+                                  QStringLiteral("n"));
+    QCommandLineOption edgeOption(QStringLiteral("gpio-edge"),
+        QCoreApplication::translate("main", "Which edge is one pulse: rising, falling (default) or both."), QStringLiteral("edge"));
+    QCommandLineOption pullOption(QStringLiteral("gpio-pull"),
+        QCoreApplication::translate("main", "Internal pull resistor: up (default), down or none."), QStringLiteral("pull"));
+    QCommandLineOption debounceOption(QStringLiteral("gpio-debounce"),
+        QCoreApplication::translate("main", "Ignore changes shorter than this many ms (default 5, 0 = off)."), QStringLiteral("ms"));
+    QCommandLineOption pulsesOption(QStringLiteral("pulses-per-row"),
+        QCoreApplication::translate("main", "Sensor pulses that make one row (default 1)."), QStringLiteral("n"));
+    QCommandLineOption simOption(QStringLiteral("sim-period"),
+        QCoreApplication::translate("main", "Simulated counter: one pulse every this many ms (default 1000, 0 = never)."), QStringLiteral("ms"));
+    parser.addOptions({windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
+                       debounceOption, pulsesOption, simOption});
     parser.process(app);
+
+    // Row counter: what was used last, changed by the options given now (and saved again).
+    QSettings settings(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));
+    RowCounterConfig counter;
+    counter.load(settings);
+    bool counterChanged = false;
+    auto take = [&](const QCommandLineOption &option, auto &&assign) {
+        if (parser.isSet(option))
+        {
+            assign(parser.value(option));
+            counterChanged = true;
+        }
+    };
+    take(counterOption, [&](const QString &v) { counter.kind = v; });
+    take(chipOption, [&](const QString &v) { counter.chip = v; });
+    take(lineOption, [&](const QString &v) { counter.line = v.toInt(); });
+    take(edgeOption, [&](const QString &v) { counter.edge = v; });
+    take(pullOption, [&](const QString &v) { counter.pull = v; });
+    take(debounceOption, [&](const QString &v) { counter.debounceMs = v.toInt(); });
+    take(pulsesOption, [&](const QString &v) { counter.pulsesPerRow = v.toInt(); });
+    take(simOption, [&](const QString &v) { counter.simulatedPeriodMs = v.toInt(); });
+    if (counterChanged)
+    {
+        const QString problem = counter.problem();
+        if (!problem.isEmpty())
+        {
+            QTextStream(stderr) << problem << "\n";
+            return 2;
+        }
+        counter.save(settings);
+    }
 
     applyGuideStyle(app);
     GuideWindow window;
@@ -85,6 +135,21 @@ int main(int argc, char *argv[])
     {
         window.chooseFile();
         if (window.job().pieces.isEmpty()) return 0;     // nothing chosen: nothing to show
+    }
+
+    // A counter that cannot start (wrong pin, no permission) is shown in the window; the buttons keep working.
+    QString counterError;
+    if (RowCounterSource *source = createRowCounter(counter, &counterError, &window))
+    {
+        window.setRowCounter(source);
+        if (!source->start(&counterError))
+        {
+            QTextStream(stderr) << counterError << "\n";
+        }
+    }
+    else if (!counterError.isEmpty())
+    {
+        QTextStream(stderr) << counterError << "\n";
     }
 
     if (parser.isSet(shot))

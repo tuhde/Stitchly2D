@@ -10,6 +10,7 @@ class QLabel;
 class QScreen;
 class QPushButton;
 class StepView;
+class RowCounterSource;
 
 /**
  * The guide: piece and row at the top, the rolling instructions in the middle, big buttons at the bottom.
@@ -32,6 +33,13 @@ public:
 
     /** Shows the window on the saved screen (default: monitor 0), fullscreen or as a normal window. */
     void showOnSavedScreen(bool fullscreen);
+
+    /**
+     * Follows this row counter: its rows move the current row. The window takes ownership and shows its state in
+     * the top bar; the counter is started by the caller. nullptr = buttons only.
+     */
+    void setRowCounter(RowCounterSource *counter);
+    RowCounterSource *rowCounter() const { return m_counter; }
 
 public slots:
     void setPiece(int piece);
@@ -58,6 +66,8 @@ private:
     bool          m_screenWatched = false;
     QLabel       *m_title = nullptr;
     QLabel       *m_rowLabel = nullptr;
+    QLabel       *m_counterLabel = nullptr;
+    RowCounterSource *m_counter = nullptr;
     StepView     *m_view = nullptr;
     QPushButton  *m_prev = nullptr;
     QPushButton  *m_next = nullptr;

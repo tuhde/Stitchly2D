@@ -16,6 +16,7 @@
 
 #include "guide_scale.h"
 #include "open_dialog.h"
+#include "row_counter.h"
 #include "step_view.h"
 
 namespace
@@ -57,7 +58,15 @@ GuideWindow::GuideWindow(QWidget *parent)
     top->addWidget(openButton);
     top->addWidget(m_pieceButton);
     top->addSpacing(u);
+    m_counterLabel = new QLabel(this);
+    QFont small = font();
+    small.setPixelSize(u);
+    m_counterLabel->setFont(small);
+    m_counterLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_counterLabel->hide();
     top->addWidget(m_title, 1);
+    top->addWidget(m_counterLabel);
+    top->addSpacing(u);
     top->addWidget(m_rowLabel);
     root->addLayout(top);
 
@@ -360,4 +369,29 @@ void GuideWindow::closeEvent(QCloseEvent *event)
 {
     saveGuideScreen(screen());
     QWidget::closeEvent(event);
+}
+
+void GuideWindow::setRowCounter(RowCounterSource *counter)
+{
+    if (m_counter)
+    {
+        m_counter->disconnect(this);
+        m_counter->deleteLater();
+    }
+    m_counter = counter;
+    m_counterLabel->setVisible(counter != nullptr);
+    if (!counter)
+    {
+        return;
+    }
+    counter->setParent(this);
+    auto showState = [this](RowCounterSource::State state, const QString &message) {
+        const bool error = state == RowCounterSource::State::Error;
+        m_counterLabel->setStyleSheet(error ? QStringLiteral("color: #ff6b6b;") : QStringLiteral("color: #7fbf7f;"));
+        m_counterLabel->setText(error ? message : (state == RowCounterSource::State::Running ? m_counter->description() : tr("counter stopped")));
+        m_counterLabel->setToolTip(message);
+    };
+    connect(counter, &RowCounterSource::rowsStepped, this, [this](int delta) { setRow(m_row + delta); });
+    connect(counter, &RowCounterSource::stateChanged, this, showState);
+    showState(counter->state(), counter->message());
 }
