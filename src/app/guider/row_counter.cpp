@@ -12,6 +12,7 @@ RowCounterSource::RowCounterSource(int pulsesPerRow, QObject *parent)
 
 void RowCounterSource::pulse(int direction)
 {
+    emit pulseCounted();
     const int rows = m_pulses.add(direction < 0 ? -1 : 1);
     if (rows != 0)
     {

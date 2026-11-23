@@ -139,15 +139,7 @@ int main(int argc, char *argv[])
 
     // A counter that cannot start (wrong pin, no permission) is shown in the window; the buttons keep working.
     QString counterError;
-    if (RowCounterSource *source = createRowCounter(counter, &counterError, &window))
-    {
-        window.setRowCounter(source);
-        if (!source->start(&counterError))
-        {
-            QTextStream(stderr) << counterError << "\n";
-        }
-    }
-    else if (!counterError.isEmpty())
+    if (!window.applyCounterConfig(counter, false, &counterError))
     {
         QTextStream(stderr) << counterError << "\n";
     }

@@ -2,11 +2,13 @@
 // checks the saved state and that the layout fits screens of different sizes.
 #include <QtTest>
 
+#include <QLabel>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
 
 #include "../../app/guider/guide_scale.h"
+#include "../../app/guider/counter_settings_dialog.h"
 #include "../../app/guider/gpio_row_counter.h"
 #include "../../app/guider/guide_window.h"
 #include "../../app/guider/row_counter.h"
@@ -48,6 +50,12 @@ private slots:
     void simulatedCounterEmitsRows();
     void windowFollowsCounter();
     void gpioFailsCleanly();
+    void stepperClamps();
+    void choiceAddsUnknownValue();
+    void settingsDialogRoundTrip();
+    void settingsDialogTestCountsPulses();
+    void settingsDialogFitsSmallScreen();
+    void applyConfigReplacesCounter();
 };
 
 void TstGuider::init()
@@ -372,6 +380,166 @@ void TstGuider::gpioFailsCleanly()
     w.nextRow();
     QCOMPARE(w.row(), 1);
     qInfo() << "GPIO support in this build:" << GpioRowCounter::available();
+}
+
+void TstGuider::stepperClamps()
+{
+    StepperRow r(QStringLiteral("x"), 1, 10, 3);
+    QSignalSpy changed(&r, &StepperRow::changed);
+    QCOMPARE(r.value(), 1);
+    r.setValue(100);
+    QCOMPARE(r.value(), 10);
+    r.setValue(-4);
+    QCOMPARE(r.value(), 1);
+    QCOMPARE(changed.count(), 2);
+    r.setValue(1);                         // no change, no signal
+    QCOMPARE(changed.count(), 2);
+    const auto buttons = r.findChildren<QPushButton *>();
+    QCOMPARE(buttons.size(), 2);
+    buttons.last()->click();               // plus = one step
+    QCOMPARE(r.value(), 4);
+    buttons.first()->click();
+    buttons.first()->click();
+    QCOMPARE(r.value(), 1);                // never below the minimum
+}
+
+void TstGuider::choiceAddsUnknownValue()
+{
+    ChoiceRow c(QStringLiteral("x"));
+    c.addChoice(QStringLiteral("A"), QStringLiteral("a"));
+    c.addChoice(QStringLiteral("B"), QStringLiteral("b"));
+    QCOMPARE(c.value(), QStringLiteral("a"));
+    c.setValue(QStringLiteral("b"));
+    QCOMPARE(c.value(), QStringLiteral("b"));
+    c.setValue(QStringLiteral("gpiochip9"));       // e.g. a chip that is not plugged in now
+    QCOMPARE(c.value(), QStringLiteral("gpiochip9"));
+    QCOMPARE(c.findChildren<QPushButton *>().size(), 3);
+}
+
+void TstGuider::settingsDialogRoundTrip()
+{
+    RowCounterConfig in;
+    in.kind = GpioRowCounter::available() ? QStringLiteral("gpio") : QStringLiteral("simulated");
+    in.chip = QStringLiteral("gpiochip4"); in.line = 23; in.edge = QStringLiteral("both"); in.pull = QStringLiteral("down");
+    in.debounceMs = 12; in.pulsesPerRow = 6; in.simulatedPeriodMs = 300;
+    CounterSettingsDialog dialog(in);
+    const RowCounterConfig out = dialog.config();
+    QCOMPARE(out.kind, in.kind);
+    QCOMPARE(out.chip, in.chip);
+    QCOMPARE(out.line, 23);
+    QCOMPARE(out.edge, in.edge);
+    QCOMPARE(out.pull, in.pull);
+    QCOMPARE(out.debounceMs, 12);
+    QCOMPARE(out.pulsesPerRow, 6);
+    QCOMPARE(out.simulatedPeriodMs, 300);
+    QVERIFY(out.problem().isEmpty());
+    // Defaults of a fresh config give a usable dialog: buttons only, and a GPIO pin is preset
+    CounterSettingsDialog fresh{RowCounterConfig()};
+    QCOMPARE(fresh.config().kind, QStringLiteral("manual"));
+    QVERIFY(fresh.config().line >= 0);
+}
+
+void TstGuider::settingsDialogTestCountsPulses()
+{
+    RowCounterConfig c;
+    c.kind = QStringLiteral("simulated"); c.simulatedPeriodMs = 5; c.pulsesPerRow = 2;
+    CounterSettingsDialog dialog(c);
+    dialog.show();
+    QPushButton *test = nullptr;
+    for (QPushButton *b : dialog.findChildren<QPushButton *>()) if (b->text() == QLatin1String("Test")) test = b;
+    QVERIFY(test);
+    QVERIFY(test->isVisible());
+    test->click();
+    QCOMPARE(test->text(), QStringLiteral("Stop test"));
+    bool counted = false;
+    QTRY_VERIFY_WITH_TIMEOUT(([&] {
+        for (QLabel *l : dialog.findChildren<QLabel *>())
+            if (l->text().startsWith(QLatin1String("Listening:"))) {
+                const QStringList w = l->text().split(' ');         // "Listening: N pulses, M rows"
+                counted = w.value(1).toInt() >= 4 && w.value(3).toInt() >= 2;
+            }
+        return counted;
+    }()), 3000);
+    test->click();
+    QCOMPARE(test->text(), QStringLiteral("Test"));
+    // A test that cannot start shows why and stays stopped
+    RowCounterConfig bad;
+    bad.kind = QStringLiteral("gpio"); bad.chip = QStringLiteral("/nonexistent/gpiochip99"); bad.line = 5;
+    if (GpioRowCounter::available())
+    {
+        CounterSettingsDialog d2(bad);
+        d2.show();
+        QPushButton *t2 = nullptr;
+        for (QPushButton *b : d2.findChildren<QPushButton *>()) if (b->text() == QLatin1String("Test")) t2 = b;
+        QVERIFY(t2);
+        t2->click();
+        QCOMPARE(t2->text(), QStringLiteral("Test"));
+        bool shown = false;
+        for (QLabel *l : d2.findChildren<QLabel *>()) shown = shown || l->text().contains(QLatin1String("/nonexistent/gpiochip99"));
+        QVERIFY(shown);
+    }
+}
+
+void TstGuider::settingsDialogFitsSmallScreen()
+{
+    qputenv("GUIDER_UNIT", "9");
+    applyGuideStyle(*qApp);
+    RowCounterConfig c;
+    c.kind = GpioRowCounter::available() ? QStringLiteral("gpio") : QStringLiteral("simulated");
+    CounterSettingsDialog dialog(c);
+    dialog.resize(800, 480);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    // OK and Cancel are always reachable, whatever the page holds
+    int reachable = 0;
+    for (QPushButton *b : dialog.findChildren<QPushButton *>())
+    {
+        if ((b->text() == QLatin1String("OK") || b->text() == QLatin1String("Cancel")))
+        {
+            const QRect r(b->mapTo(&dialog, QPoint()), b->size());
+            QVERIFY(dialog.rect().contains(r));
+            QVERIFY(r.height() >= 9 * 2);
+            ++reachable;
+        }
+    }
+    QCOMPARE(reachable, 2);
+    // GUIDER_TEST_SHOTS=dir saves a picture of the dialog, for a look by eye
+    if (qEnvironmentVariableIsSet("GUIDER_TEST_SHOTS"))
+        dialog.grab().save(qEnvironmentVariable("GUIDER_TEST_SHOTS") + QStringLiteral("/settings_800x480.png"));
+    qunsetenv("GUIDER_UNIT");
+}
+
+void TstGuider::applyConfigReplacesCounter()
+{
+    GuideWindow w;
+    QVERIFY(w.openFile(shirt()));
+    QVERIFY(!w.rowCounter());
+    RowCounterConfig sim;
+    sim.kind = QStringLiteral("simulated"); sim.simulatedPeriodMs = 0;
+    QString error;
+    QVERIFY2(w.applyCounterConfig(sim, true, &error), qPrintable(error));
+    auto *counter = qobject_cast<SimulatedRowCounter *>(w.rowCounter());
+    QVERIFY(counter);
+    QCOMPARE(counter->state(), RowCounterSource::State::Running);
+    counter->injectPulse();
+    QCOMPARE(w.row(), 1);
+    // Saved for the next start
+    RowCounterConfig back;
+    QSettings s(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));
+    back.load(s);
+    QCOMPARE(back.kind, QStringLiteral("simulated"));
+    // A wrong config is refused and changes nothing
+    RowCounterConfig bad;
+    bad.kind = QStringLiteral("gpio");          // no line
+    QVERIFY(!w.applyCounterConfig(bad, true, &error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(w.rowCounter() == counter);
+    back.load(s);
+    QCOMPARE(back.kind, QStringLiteral("simulated"));
+    // Buttons only removes the counter
+    QVERIFY(w.applyCounterConfig(RowCounterConfig(), false, &error));
+    QVERIFY(!w.rowCounter());
+    QCOMPARE(w.counterConfig().kind, QStringLiteral("manual"));
 }
 
 int main(int argc, char *argv[])

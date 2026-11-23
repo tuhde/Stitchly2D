@@ -6,6 +6,7 @@ SOURCES += \
     $$PWD/step_view.cpp \
     $$PWD/open_dialog.cpp \
     $$PWD/guide_scale.cpp \
+    $$PWD/counter_settings_dialog.cpp \
     $$PWD/row_counter.cpp \
     $$PWD/simulated_row_counter.cpp \
     $$PWD/gpio_row_counter.cpp
@@ -15,6 +16,7 @@ HEADERS += \
     $$PWD/step_view.h \
     $$PWD/open_dialog.h \
     $$PWD/guide_scale.h \
+    $$PWD/counter_settings_dialog.h \
     $$PWD/row_counter.h \
     $$PWD/simulated_row_counter.h \
     $$PWD/gpio_row_counter.h

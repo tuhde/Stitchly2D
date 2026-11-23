@@ -59,6 +59,7 @@ public:
 
 signals:
     void rowsStepped(int delta);                        //!< rows moved, never 0
+    void pulseCounted();                                //!< every sensor pulse (also those that do not complete a row)
     void stateChanged(RowCounterSource::State state, const QString &message);
 
 protected:

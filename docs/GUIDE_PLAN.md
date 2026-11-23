@@ -26,7 +26,7 @@ Goal: a program that shows an open dialog for a pattern, then shows its instruct
 1. (done) Extract loader lib; editor and tests still build/pass.
 2. (done) Guide skeleton: open dialog → piece → fullscreen rolling view, manual row control, runs on desktop.
 3. (done) Structured steps + tests (`src/test/stitchcore`), offscreen UI test like `src/test/mainwindow`.
-4. (in progress: interface, simulated and one-pin GPIO done; USB and settings screen open) Row counter interface + GPIO and USB sources (needs hardware details).
+4. (in progress: interface, simulated and one-pin GPIO done; settings screen done; USB open) Row counter interface + GPIO and USB sources (needs hardware details).
 5. Pi packaging: build notes, autologin/autostart, kiosk behavior.
 
 ## Decisions

@@ -4,13 +4,14 @@
 
 #include <QWidget>
 
+#include "row_counter.h"
+
 #include "../../libs/stitchload/core/knit_job.h"
 
 class QLabel;
 class QScreen;
 class QPushButton;
 class StepView;
-class RowCounterSource;
 
 /**
  * The guide: piece and row at the top, the rolling instructions in the middle, big buttons at the bottom.
@@ -41,6 +42,14 @@ public:
     void setRowCounter(RowCounterSource *counter);
     RowCounterSource *rowCounter() const { return m_counter; }
 
+    /**
+     * Uses the counter described by config (buttons only for kind "manual"): replaces the current one, starts the new
+     * one and, with save, keeps the config for the next start. A counter that cannot start is still shown, with the
+     * reason in the top bar. Returns false and the reason in error if the config itself is wrong or the counter did not start.
+     */
+    bool applyCounterConfig(const RowCounterConfig &config, bool save, QString *error = nullptr);
+    const RowCounterConfig &counterConfig() const { return m_counterConfig; }
+
 public slots:
     void setPiece(int piece);
     void setRow(int row);                 //!< clamped to 0 .. rowCount + 1
@@ -49,6 +58,7 @@ public slots:
     void chooseFile();
     void choosePiece();
     void jumpToRow();
+    void openCounterSettings();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -68,6 +78,7 @@ private:
     QLabel       *m_rowLabel = nullptr;
     QLabel       *m_counterLabel = nullptr;
     RowCounterSource *m_counter = nullptr;
+    RowCounterConfig  m_counterConfig;
     StepView     *m_view = nullptr;
     QPushButton  *m_prev = nullptr;
     QPushButton  *m_next = nullptr;

@@ -14,6 +14,7 @@
 #include <QSettings>
 #include <QVBoxLayout>
 
+#include "counter_settings_dialog.h"
 #include "guide_scale.h"
 #include "open_dialog.h"
 #include "row_counter.h"
@@ -47,6 +48,7 @@ GuideWindow::GuideWindow(QWidget *parent)
     auto *top = new QHBoxLayout;
     auto *openButton = new QPushButton(tr("Open"), this);
     m_pieceButton = new QPushButton(tr("Piece"), this);
+    auto *settingsButton = new QPushButton(tr("Counter"), this);
     m_title = new QLabel(this);
     m_rowLabel = new QLabel(this);
     QFont big = font();
@@ -57,6 +59,7 @@ GuideWindow::GuideWindow(QWidget *parent)
     m_rowLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     top->addWidget(openButton);
     top->addWidget(m_pieceButton);
+    top->addWidget(settingsButton);
     top->addSpacing(u);
     m_counterLabel = new QLabel(this);
     QFont small = font();
@@ -85,7 +88,7 @@ GuideWindow::GuideWindow(QWidget *parent)
         f.setPixelSize(u * 3 / 2 + u / 2);
         b->setFont(f);
     }
-    for (QPushButton *b : {openButton, m_pieceButton})
+    for (QPushButton *b : {openButton, m_pieceButton, settingsButton})
     {
         b->setFocusPolicy(Qt::NoFocus);
     }
@@ -99,6 +102,7 @@ GuideWindow::GuideWindow(QWidget *parent)
 
     connect(openButton, &QPushButton::clicked, this, &GuideWindow::chooseFile);
     connect(m_pieceButton, &QPushButton::clicked, this, &GuideWindow::choosePiece);
+    connect(settingsButton, &QPushButton::clicked, this, &GuideWindow::openCounterSettings);
     connect(m_prev, &QPushButton::clicked, this, &GuideWindow::previousRow);
     connect(m_next, &QPushButton::clicked, this, &GuideWindow::nextRow);
     connect(jump, &QPushButton::clicked, this, &GuideWindow::jumpToRow);
@@ -319,6 +323,9 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
         case Qt::Key_G:
             jumpToRow();
             break;
+        case Qt::Key_C:
+            openCounterSettings();
+            break;
         case Qt::Key_F11:
             isFullScreen() ? showNormal() : showFullScreen();
             break;
@@ -394,4 +401,45 @@ void GuideWindow::setRowCounter(RowCounterSource *counter)
     connect(counter, &RowCounterSource::rowsStepped, this, [this](int delta) { setRow(m_row + delta); });
     connect(counter, &RowCounterSource::stateChanged, this, showState);
     showState(counter->state(), counter->message());
+}
+
+bool GuideWindow::applyCounterConfig(const RowCounterConfig &config, bool save, QString *error)
+{
+    const QString problem = config.problem();
+    if (!problem.isEmpty())
+    {
+        if (error) *error = problem;
+        return false;
+    }
+    m_counterConfig = config;
+    if (save)
+    {
+        QSettings s(QStringLiteral("Stitchly2D"), QStringLiteral("guider"));
+        config.save(s);
+    }
+    RowCounterSource *source = createRowCounter(config, nullptr, this);
+    setRowCounter(source);               // nullptr for "manual": buttons only
+    if (source && !source->start(error))
+    {
+        return false;
+    }
+    return true;
+}
+
+void GuideWindow::openCounterSettings()
+{
+    // The test in the dialog needs the pin, so let go of it while the dialog is open.
+    if (m_counter)
+    {
+        m_counter->stop();
+    }
+    CounterSettingsDialog dialog(m_counterConfig, this);
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        applyCounterConfig(dialog.config(), true);
+    }
+    else if (m_counter)
+    {
+        m_counter->start();
+    }
 }
