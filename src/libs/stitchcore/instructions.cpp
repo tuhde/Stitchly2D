@@ -422,5 +422,30 @@ QString rowTableCsv(const StitchGrid &grid, const ShapingOptions &options)
     return csv;
 }
 
+int nextStepRow(const QVector<InstructionStep> &steps, int row)
+{
+    int best = row;
+    for (const InstructionStep &s : steps)
+    {
+        if (s.firstRow > row && (best == row || s.firstRow < best))
+        {
+            best = s.firstRow;
+        }
+    }
+    return best;
 }
 
+int previousStepRow(const QVector<InstructionStep> &steps, int row)
+{
+    int best = row;
+    for (const InstructionStep &s : steps)
+    {
+        if (s.firstRow < row && (best == row || s.firstRow > best))
+        {
+            best = s.firstRow;
+        }
+    }
+    return best;
+}
+
+}

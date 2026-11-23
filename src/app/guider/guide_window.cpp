@@ -194,6 +194,22 @@ void GuideWindow::setRow(int row)
     updateView();
 }
 
+void GuideWindow::nextBlock()
+{
+    if (m_piece >= 0 && m_piece < m_job.pieces.size())
+    {
+        setRow(stitchcore::nextStepRow(m_job.pieces.at(m_piece).steps, m_row));
+    }
+}
+
+void GuideWindow::previousBlock()
+{
+    if (m_piece >= 0 && m_piece < m_job.pieces.size())
+    {
+        setRow(stitchcore::previousStepRow(m_job.pieces.at(m_piece).steps, m_row));
+    }
+}
+
 void GuideWindow::saveState() const
 {
     if (m_piece < 0 || m_piece >= m_job.pieces.size())
@@ -305,11 +321,17 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key())
     {
-        case Qt::Key_Right: case Qt::Key_Down: case Qt::Key_Space: case Qt::Key_PageDown:
+        case Qt::Key_Right: case Qt::Key_Down: case Qt::Key_Space:
             nextRow();
             break;
-        case Qt::Key_Left: case Qt::Key_Up: case Qt::Key_Backspace: case Qt::Key_PageUp:
+        case Qt::Key_Left: case Qt::Key_Up: case Qt::Key_Backspace:
             previousRow();
+            break;
+        case Qt::Key_PageDown:
+            nextBlock();
+            break;
+        case Qt::Key_PageUp:
+            previousBlock();
             break;
         case Qt::Key_Home:
             setRow(0);

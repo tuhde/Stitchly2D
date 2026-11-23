@@ -38,6 +38,7 @@ private slots:
     void rowsAreClamped();
     void keysStepThroughRows();
     void stepsFollowTheRow();
+    void pageKeysJumpByBlock();
     void piecesKeepTheirRow();
     void rowIsRememberedPerFile();
     void badFileReportsError();
@@ -130,6 +131,48 @@ void TstGuider::stepsFollowTheRow()
         w.setRow(row);
         QVERIFY2(!stepsForRow(p.steps, row).isEmpty(), qPrintable(QStringLiteral("no step for row %1").arg(row)));
     }
+}
+
+void TstGuider::pageKeysJumpByBlock()
+{
+    GuideWindow w;
+    QVERIFY(w.openFile(shirt()));
+    w.show();
+    const auto &steps = w.job().pieces.at(w.piece()).steps;
+    // Page Down visits the start of every block in turn, up to the bind-off line
+    QVector<int> starts;
+    for (const auto &s : steps) if (!starts.contains(s.firstRow)) starts << s.firstRow;
+    std::sort(starts.begin(), starts.end());
+    QVERIFY(starts.size() > 3);
+    QCOMPARE(w.row(), 0);
+    for (int i = 1; i < starts.size(); ++i)
+    {
+        QTest::keyClick(&w, Qt::Key_PageDown);
+        QCOMPARE(w.row(), starts.at(i));
+    }
+    QCOMPARE(w.row(), w.rowCount() + 1);
+    QTest::keyClick(&w, Qt::Key_PageDown);            // stays at the end
+    QCOMPARE(w.row(), w.rowCount() + 1);
+    // Page Up goes back the same way
+    for (int i = starts.size() - 2; i >= 0; --i)
+    {
+        QTest::keyClick(&w, Qt::Key_PageUp);
+        QCOMPARE(w.row(), starts.at(i));
+    }
+    QTest::keyClick(&w, Qt::Key_PageUp);
+    QCOMPARE(w.row(), 0);
+    // From the middle of a block ("Rows 1-2: work even" on the sample): Page Down to the next block, Page Up to the
+    // start of this one
+    w.setRow(2);
+    QTest::keyClick(&w, Qt::Key_PageUp);
+    QCOMPARE(w.row(), 1);
+    w.setRow(2);
+    QTest::keyClick(&w, Qt::Key_PageDown);
+    QVERIFY(w.row() > 2);
+    // The arrow keys still move by one row
+    w.setRow(0);
+    QTest::keyClick(&w, Qt::Key_Down);
+    QCOMPARE(w.row(), 1);
 }
 
 void TstGuider::piecesKeepTheirRow()

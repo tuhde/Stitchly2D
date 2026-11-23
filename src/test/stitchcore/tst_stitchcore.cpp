@@ -24,6 +24,7 @@ private slots:
     void invalidInput();
     void instructionsText();
     void instructionSteps();
+    void stepBlocksNavigate();
     void csv();
     void library();
     void bandsRibThenStockinette();
@@ -171,6 +172,30 @@ void TstStitchCore::instructionSteps()
         }
     }
     QVERIFY(stepsForRow(steps, grid.rowCount() + 2).isEmpty());
+}
+
+void TstStitchCore::stepBlocksNavigate()
+{
+    // Blocks: cast on (row 0), rows 1-2, row 3, rows 4-9, bind off (row 10)
+    const QVector<InstructionStep> steps = {{0, 0, "cast on"}, {1, 2, "a"}, {3, 3, "b"}, {4, 9, "c"}, {10, 10, "bind off"}};
+    QCOMPARE(nextStepRow(steps, 0), 1);
+    QCOMPARE(nextStepRow(steps, 1), 3);        // from inside a block to the start of the next one
+    QCOMPARE(nextStepRow(steps, 2), 3);
+    QCOMPARE(nextStepRow(steps, 3), 4);
+    QCOMPARE(nextStepRow(steps, 7), 10);
+    QCOMPARE(nextStepRow(steps, 10), 10);      // nothing after the last block
+    QCOMPARE(previousStepRow(steps, 10), 4);
+    QCOMPARE(previousStepRow(steps, 7), 4);    // inside rows 4-9: back to the start of this block ...
+    QCOMPARE(previousStepRow(steps, 4), 3);    // ... and from there to the block before
+    QCOMPARE(previousStepRow(steps, 2), 1);
+    QCOMPARE(previousStepRow(steps, 1), 0);
+    QCOMPARE(previousStepRow(steps, 0), 0);    // nothing before the first block
+    // A "pattern:" line shares the rows of its row line and is not a block of its own
+    const QVector<InstructionStep> withPattern = {{0, 0, "cast on"}, {1, 1, "row 1"}, {1, 1, "    pattern: x"}, {2, 5, "even"}};
+    QCOMPARE(nextStepRow(withPattern, 0), 1);
+    QCOMPARE(nextStepRow(withPattern, 1), 2);
+    QCOMPARE(nextStepRow({}, 3), 3);
+    QCOMPARE(previousStepRow({}, 3), 3);
 }
 
 void TstStitchCore::csv()

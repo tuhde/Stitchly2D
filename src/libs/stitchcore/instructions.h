@@ -29,6 +29,18 @@ QVector<InstructionStep> writeInstructionSteps(const StitchGrid &grid, const Sha
 /** Indexes of the steps that cover this row (0 = before the first row, rowCount + 1 = after the last), in order. */
 QVector<int> stepsForRow(const QVector<InstructionStep> &steps, int row);
 
+/**
+ * Where the next block of instructions starts: the first row after `row` at which a step begins (a block is what one
+ * step covers, e.g. "Rows 5-12: work even"). Returns row itself if there is no later block.
+ */
+int nextStepRow(const QVector<InstructionStep> &steps, int row);
+
+/**
+ * Where the current block starts if `row` is inside it, else where the block before starts (the last start of a step
+ * before `row`), like "previous" in a music player; row itself if there is none.
+ */
+int previousStepRow(const QVector<InstructionStep> &steps, int row);
+
 /** Written instructions for one piece, one line per step. Row numbers are one-based. */
 QStringList writeInstructions(const StitchGrid &grid, const ShapingOptions &options = ShapingOptions());
 

@@ -55,6 +55,8 @@ public slots:
     void setRow(int row);                 //!< clamped to 0 .. rowCount + 1
     void nextRow() { setRow(m_row + 1); }
     void previousRow() { setRow(m_row - 1); }
+    void nextBlock();                     //!< to the first row of the next block of instructions (Page Down)
+    void previousBlock();                 //!< to the first row of this block, or of the one before if already there (Page Up)
     void chooseFile();
     void choosePiece();
     void jumpToRow();
