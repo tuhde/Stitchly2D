@@ -57,7 +57,7 @@ suggest gauge** from the yarn; the guider **asks for yarn only if the project do
 - Use "outside/inside" wording only, never RS/WS (memory).
 - Commit after each finished phase; push only on request.
 
-## Phases (status: 1 to 4 done)
+## Phases (status: all phases done)
 1. `stitchcore`: Yarn model, inventory JSON, estimate, project `yarns` key + tests in `tst_stitchcore`.
 2. `yarnui` lib + editor dialog + project-panel pickers/estimate/gauge suggestion (+ `tst_mainwindow`).
 3. Guider yarn dialog, remembered choice, yarn display, stock deduction (+ `tst_guider`).

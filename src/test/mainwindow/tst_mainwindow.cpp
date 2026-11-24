@@ -80,6 +80,7 @@ private slots:
     void yarnGaugeSetsStitchSizes();
     void yarnPanel();
     void yarnInventoryEditor();
+    void toolsYarns();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -1460,3 +1461,40 @@ int main(int argc, char *argv[])
 }
 
 #include "tst_mainwindow.moc"
+
+void TstMainWindow::toolsYarns()
+{
+    McpToolResult r = call("set_yarn", {{"brand", "Test"}, {"name", "Fine"}, {"colorHex", "#336699"},
+                                        {"metersPerSkein", 200}, {"skeinsInStock", 3},
+                                        {"gauges", QJsonArray{QJsonObject{{"stitchType", "Garter"}, {"stitchWidthMm", 3.5}, {"rowHeightMm", 2.5}}}}});
+    QVERIFY2(!r.isError, qPrintable(r.text));
+    const QString id = r.structured.toObject().value("id").toString();
+    QVERIFY(!id.isEmpty());
+    QCOMPARE(window->yarnInventory().size(), 1);
+    QCOMPARE(window->yarnInventory().find(id)->stockMeters(), 600.0);
+
+    // change by name keeps the rest
+    QVERIFY(!call("set_yarn", {{"name", "fine"}, {"skeinsInStock", 5}}).isError);
+    QCOMPARE(window->yarnInventory().size(), 1);
+    QCOMPARE(window->yarnInventory().find(id)->skeinsInStock, 5);
+    QCOMPARE(window->yarnInventory().find(id)->gauges.size(), 1);
+
+    QVERIFY(call("set_yarn", {{"name", "Bad"}, {"colorHex", "nope"}}).isError);
+    QVERIFY(call("set_yarn", {{"notes", "no name"}}).isError);
+    QVERIFY(call("set_yarn", {{"id", "missing"}, {"name", "X"}}).isError);
+    QVERIFY(call("set_yarn", {{"name", "Neg"}, {"skeinsInStock", -1}}).isError);
+    QCOMPARE(window->yarnInventory().size(), 1);
+
+    QVERIFY(call("choose_yarn", {{"yarnId", "missing"}}).isError);
+    QVERIFY(!call("choose_yarn", {{"yarnId", id}}).isError);
+    QCOMPARE(window->yarnRefs().value("main").id, id);
+    const QJsonObject info = call("get_yarns").structured.toObject();
+    QCOMPARE(info.value("yarns").toArray().size(), 1);
+    QCOMPARE(info.value("slots").toArray().first().toObject().value("yarnId").toString(), id);
+
+    QVERIFY(!call("choose_yarn", {{"yarnId", ""}}).isError);
+    QVERIFY(call("use_yarn_gauge").isError);                                  // no main yarn
+
+    QVERIFY(!call("delete_yarn", {{"id", id}}).isError);
+    QVERIFY(call("delete_yarn", {{"id", id}}).isError);
+}

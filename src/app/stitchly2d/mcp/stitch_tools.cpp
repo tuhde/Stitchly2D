@@ -1,6 +1,7 @@
 #include "stitch_tools.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -11,6 +12,7 @@
 #include "../mainwindow.h"
 #include "../../../libs/stitchcore/catalog.h"
 #include "../../../libs/stitchcore/project.h"
+#include "../../../libs/stitchcore/yarn_estimate.h"
 #include "../../../libs/vmcp/mcptoolregistry.h"
 
 using namespace stitchcore;
@@ -508,6 +510,176 @@ void registerStitchTools(McpToolRegistry &registry, MainWindow *w)
             }
             w->setCatalog(c, QObject::tr("Delete basic stitch %1").arg(name));
             return McpToolResult::ok(QStringLiteral("Removed %1").arg(name));
+        }));
+
+    // ---- Yarns -------------------------------------------------------------------------------------------------------
+    registry.registerTool(tool(w,
+        QStringLiteral("get_yarns"),
+        QStringLiteral("The yarn inventory (brand, name, color, stock in skeins and meters, gauges per basic stitch), the "
+                       "yarn chosen for each slot of the open project (\"main\" and the color names of color patterns) "
+                       "and, per slot, the meters the project needs and whether the stock is enough."),
+        noArguments, true, [w](const QJsonObject &) {
+            QJsonArray yarns;
+            for (const Yarn &y : w->yarnInventory().yarns())
+            {
+                QJsonObject o = y.toJson();
+                o.insert(QStringLiteral("stockMeters"), y.stockMeters());
+                yarns.append(o);
+            }
+            QJsonArray slotLines;
+            for (const MainWindow::YarnLine &l : w->yarnReport())
+            {
+                slotLines.append(QJsonObject{{QStringLiteral("slot"), l.slot},
+                                             {QStringLiteral("yarnId"), l.yarnId},
+                                             {QStringLiteral("yarn"), l.yarnName},
+                                             {QStringLiteral("stitches"), l.stitches},
+                                             {QStringLiteral("neededMeters"), l.neededMeters},
+                                             {QStringLiteral("stockMeters"), l.stockMeters},
+                                             {QStringLiteral("enough"), l.enough}});
+            }
+            return McpToolResult::ok(QStringLiteral("%1 yarn(s):").arg(yarns.size()),
+                                     QJsonObject{{QStringLiteral("yarns"), yarns}, {QStringLiteral("slots"), slotLines}});
+        }));
+
+    registry.registerTool(tool(w,
+        QStringLiteral("set_yarn"),
+        QStringLiteral("Add a yarn to the inventory, or change one (give its `id`, or the exact `name`, to change it). Only "
+                       "the fields you give are set. `gauges` replaces the gauges of the yarn: what it knits to with a "
+                       "basic stitch. The change applies to this session; the user keeps it in the yarns file by pressing "
+                       "OK in the Yarns dialog."),
+        object({{QStringLiteral("id"), str(QStringLiteral("Id of the yarn to change (from get_yarns)."))},
+                {QStringLiteral("brand"), str(QStringLiteral("Brand."))},
+                {QStringLiteral("name"), str(QStringLiteral("Name of the yarn."))},
+                {QStringLiteral("fiber"), str(QStringLiteral("Fiber, e.g. \"merino 80%, nylon 20%\"."))},
+                {QStringLiteral("weightClass"), str(QStringLiteral("e.g. \"DK\" or \"fingering\"."))},
+                {QStringLiteral("colorName"), str(QStringLiteral("Color name."))},
+                {QStringLiteral("colorHex"), str(QStringLiteral("Color as #rrggbb."))},
+                {QStringLiteral("dyeLot"), str(QStringLiteral("Dye lot."))},
+                {QStringLiteral("notes"), str(QStringLiteral("Notes."))},
+                {QStringLiteral("metersPerSkein"), num(QStringLiteral("Length of one skein in meters."))},
+                {QStringLiteral("gramsPerSkein"), num(QStringLiteral("Weight of one skein in grams."))},
+                {QStringLiteral("skeinsInStock"), integer(QStringLiteral("Whole skeins in stock."))},
+                {QStringLiteral("partialMeters"), num(QStringLiteral("Meters left on an opened skein."))},
+                {QStringLiteral("gauges"), QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                    {QStringLiteral("description"), QStringLiteral("Gauges: {stitchType, stitchWidthMm, rowHeightMm, "
+                                                                   "yarnPerStitchMm (optional, 0 = estimate)}.")},
+                    {QStringLiteral("items"), object({{QStringLiteral("stitchType"), str(QStringLiteral("Basic stitch name."))},
+                                                      {QStringLiteral("stitchWidthMm"), num(QStringLiteral("Stitch width in mm."))},
+                                                      {QStringLiteral("rowHeightMm"), num(QStringLiteral("Row height in mm."))},
+                                                      {QStringLiteral("yarnPerStitchMm"), num(QStringLiteral("Yarn per stitch in mm."))}},
+                                                     {QStringLiteral("stitchType"), QStringLiteral("stitchWidthMm"), QStringLiteral("rowHeightMm")})}}}}),
+        false, [w](const QJsonObject &a) {
+            YarnInventory inventory = w->yarnInventory();
+            Yarn yarn;
+            bool existed = false;
+            const QString key = has(a, "id") ? text(a, "id") : QString();
+            if (!key.isEmpty())
+            {
+                const Yarn *found = inventory.find(key);
+                if (!found) return McpToolResult::error(QStringLiteral("No yarn with the id \"%1\".").arg(key));
+                yarn = *found;
+                existed = true;
+            }
+            else if (has(a, "name"))
+            {
+                QVector<const Yarn *> matches;
+                for (const Yarn &y : inventory.yarns())
+                {
+                    if (y.name.compare(text(a, "name"), Qt::CaseInsensitive) == 0
+                        && (!has(a, "brand") || y.brand.compare(text(a, "brand"), Qt::CaseInsensitive) == 0))
+                    {
+                        matches << &y;
+                    }
+                }
+                if (matches.size() > 1) return McpToolResult::error(QStringLiteral("More than one yarn is called \"%1\". Give its id.").arg(text(a, "name")));
+                if (matches.size() == 1) { yarn = *matches.first(); existed = true; }
+            }
+            auto setText = [&a](const char *k, QString &field) { if (has(a, k)) field = text(a, k); };
+            setText("brand", yarn.brand);
+            setText("name", yarn.name);
+            setText("fiber", yarn.fiber);
+            setText("weightClass", yarn.weightClass);
+            setText("colorName", yarn.colorName);
+            setText("colorHex", yarn.colorHex);
+            setText("dyeLot", yarn.dyeLot);
+            setText("notes", yarn.notes);
+            if (has(a, "metersPerSkein")) yarn.metersPerSkein = a.value(QStringLiteral("metersPerSkein")).toDouble();
+            if (has(a, "gramsPerSkein")) yarn.gramsPerSkein = a.value(QStringLiteral("gramsPerSkein")).toDouble();
+            if (has(a, "skeinsInStock")) yarn.skeinsInStock = a.value(QStringLiteral("skeinsInStock")).toInt();
+            if (has(a, "partialMeters")) yarn.partialMeters = a.value(QStringLiteral("partialMeters")).toDouble();
+            if (has(a, "gauges"))
+            {
+                yarn.gauges.clear();
+                for (const QJsonValue &v : a.value(QStringLiteral("gauges")).toArray())
+                {
+                    const QJsonObject g = v.toObject();
+                    YarnGauge gauge;
+                    gauge.stitchType = g.value(QStringLiteral("stitchType")).toString().trimmed();
+                    gauge.size.stitchWidthMm = g.value(QStringLiteral("stitchWidthMm")).toDouble();
+                    gauge.size.rowHeightMm = g.value(QStringLiteral("rowHeightMm")).toDouble();
+                    gauge.yarnPerStitchMm = g.value(QStringLiteral("yarnPerStitchMm")).toDouble();
+                    if (gauge.stitchType.isEmpty() || !gauge.size.isValid())
+                    {
+                        return McpToolResult::error(QStringLiteral("Every gauge needs a stitchType and a stitchWidthMm and rowHeightMm above 0."));
+                    }
+                    yarn.gauges << gauge;
+                }
+            }
+            if (yarn.brand.isEmpty() && yarn.name.isEmpty())
+            {
+                return McpToolResult::error(QStringLiteral("Give the yarn a brand or a name."));
+            }
+            if (!yarn.colorHex.isEmpty() && !QColor(yarn.colorHex).isValid())
+            {
+                return McpToolResult::error(QStringLiteral("colorHex must look like #rrggbb."));
+            }
+            if (yarn.metersPerSkein < 0 || yarn.gramsPerSkein < 0 || yarn.skeinsInStock < 0 || yarn.partialMeters < 0)
+            {
+                return McpToolResult::error(QStringLiteral("Lengths, weights and skeins cannot be negative."));
+            }
+            const QString id = inventory.set(yarn);
+            w->setYarnInventory(inventory);
+            return McpToolResult::ok(QStringLiteral("%1 yarn %2").arg(existed ? QStringLiteral("Changed") : QStringLiteral("Added"),
+                                                                       yarn.displayName()),
+                                     QJsonObject{{QStringLiteral("id"), id}});
+        }));
+
+    registry.registerTool(tool(w,
+        QStringLiteral("delete_yarn"),
+        QStringLiteral("Remove a yarn from the inventory. Projects that name it keep its name and color."),
+        object({{QStringLiteral("id"), str(QStringLiteral("Id of the yarn (from get_yarns)."))}}, {QStringLiteral("id")}), false,
+        [w](const QJsonObject &a) {
+            YarnInventory inventory = w->yarnInventory();
+            const QString id = text(a, "id");
+            if (!inventory.remove(id)) return McpToolResult::error(QStringLiteral("No yarn with the id \"%1\".").arg(id));
+            w->setYarnInventory(inventory);
+            return McpToolResult::ok(QStringLiteral("Removed the yarn"));
+        }));
+
+    registry.registerTool(tool(w,
+        QStringLiteral("choose_yarn"),
+        QStringLiteral("Knit a slot of the open project with a yarn of the inventory. The slot is \"main\" or the color "
+                       "name of a color pattern. An empty `yarnId` takes the yarn off the slot. The guider then does not "
+                       "ask for this yarn."),
+        object({{QStringLiteral("slot"), str(QStringLiteral("\"main\" or a color name; default \"main\"."))},
+                {QStringLiteral("yarnId"), str(QStringLiteral("Id of the yarn (from get_yarns); empty for none."))}},
+               {QStringLiteral("yarnId")}),
+        false, [w](const QJsonObject &a) {
+            const QString slot = has(a, "slot") ? text(a, "slot") : QString::fromLatin1(kMainYarnSlot);
+            QString error;
+            if (!w->setYarn(slot, text(a, "yarnId"), &error)) return McpToolResult::error(error);
+            return McpToolResult::ok(QStringLiteral("Slot %1 set").arg(slot));
+        }));
+
+    registry.registerTool(tool(w,
+        QStringLiteral("use_yarn_gauge"),
+        QStringLiteral("Set the stitch width and row height of every basic stitch the \"main\" yarn has a gauge for to "
+                       "that gauge, so the pieces are knitted at the size the yarn really gives."),
+        noArguments, false, [w](const QJsonObject &) {
+            QString error;
+            const int n = w->useYarnGauge(&error);
+            if (n < 0 || !error.isEmpty()) return McpToolResult::error(error);
+            return McpToolResult::ok(QStringLiteral("Changed %1 basic stitch(es)").arg(n));
         }));
 
     registry.registerTool(tool(w,

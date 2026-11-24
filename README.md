@@ -63,7 +63,7 @@ pattern. Pieces are turned so their grainline is vertical. `--cli` needs no disp
 
 `guider` is a second program for a Raspberry Pi with a touch screen at the knitting machine. It opens a `.stitchly` or `.sm2d` file, shows the instructions as large rolling text, and follows a row counter (touch buttons, a GPIO sensor or a simulated one). Run `guider pattern.stitchly` (`--windowed` for a window, `--lang de_DE` for German, `--help` for all options). Keys: arrows/Space/Backspace row by row, Page Up/Down by block, Home/End first row and bind-off, O open, P piece, G go to row, S settings, Y yarn. Setup on the Pi (build, GPIO, autostart): [docs/GUIDER_PI.md](docs/GUIDER_PI.md); design: [docs/GUIDE_PLAN.md](docs/GUIDE_PLAN.md).
 
-Yarns: the guider reads the yarn inventory (`yarns.json` in the same config folder as the catalog, edited in the editor under Yarns). When a project does not name the yarn of a piece, the guider asks for it as the piece is opened (a Garn/Yarn button and the Y key ask again, `--yarn name` settles the main yarn), shows the yarn of the row in the top bar, and when the bind-off is reached offers to take the estimated yarn from the stock. `yarnbox` is the yarn inventory as a small program of its own (no pattern loader, starts fast; `--lang`, optional file argument, desktop entry in `share/yarnbox`). It asks before overwriting a yarn file that changed meanwhile, for example by the guider taking used yarn from the stock. See [docs/YARN_PLAN.md](docs/YARN_PLAN.md).
+Yarns: the guider reads the yarn inventory (`yarns.json` in the same config folder as the catalog, edited in the editor under Yarns). When a project does not name the yarn of a piece, the guider asks for it as the piece is opened (a Garn/Yarn button and the Y key ask again, `--yarn name` settles the main yarn), shows the yarn of the row in the top bar, and when the bind-off is reached offers to take the estimated yarn from the stock. `yarnbox` is the yarn inventory as a small program of its own (no pattern loader, starts fast; `--lang`, optional file argument, desktop entry in `share/yarnbox`). It asks before overwriting a yarn file that changed meanwhile, for example by the guider taking used yarn from the stock. File format: [docs/YARN_FILE_FORMAT.md](docs/YARN_FILE_FORMAT.md); design: [docs/YARN_PLAN.md](docs/YARN_PLAN.md).
 
 ## Languages
 
@@ -98,7 +98,7 @@ The names of the catalog's stitches and patterns, the CSV header and the tool de
 ## AI integration
 
 Like our Seamly2D fork, Stitchly2D contains an optional Model Context Protocol server, so that Claude can open a
-pattern, set the stitch size, add stitches and patterns to the catalog, give pieces bands and patterns, and read the
+pattern, set the stitch size, add stitches and patterns to the catalog, give pieces bands and patterns, manage yarns and choose them for a project, and read the
 instructions in the running window. It is off by default, listens on `127.0.0.1` only (port 47801), requires a token
 and asks before touching files. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md).
 
