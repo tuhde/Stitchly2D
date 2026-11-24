@@ -41,6 +41,11 @@ public:
     const KnitJob &job() const { return m_job; }
     QStringList recentFiles() const;
 
+    /** True if the system reports a touch screen. */
+    static bool hasTouchScreen();
+    /** Hides the mouse pointer over the window with a touch screen, shows it otherwise (a mouse is then all there is). */
+    void updateCursor();
+
     /** Shows the window on the saved screen (default: monitor 0), fullscreen or as a normal window. */
     void showOnSavedScreen(bool fullscreen);
 

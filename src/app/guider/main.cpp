@@ -119,6 +119,7 @@ int main(int argc, char *argv[])
         path = QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).value(QStringLiteral("lastFile")).toString();
         if (!QFileInfo::exists(path)) path.clear();
     }
+    window.updateCursor();                   // touch screen: no pointer; otherwise the mouse needs one
     if (parser.isSet(windowed))
     {
         const QStringList wh = parser.value(size).split(QLatin1Char('x'));
@@ -127,7 +128,6 @@ int main(int argc, char *argv[])
     }
     else
     {
-        window.setCursor(Qt::BlankCursor);   // touch screen: no pointer
         window.showOnSavedScreen(true);
     }
 

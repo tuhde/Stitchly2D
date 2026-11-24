@@ -66,6 +66,7 @@ private slots:
     void yarnShownInTheBar();
     void yarnDeductedWhenFinished();
     void yarnMainFromOption();
+    void cursorFollowsTouchScreen();
     void opensPattern();
     void rowsAreClamped();
     void keysStepThroughRows();
@@ -1168,6 +1169,13 @@ void TstGuider::looksOfDialogs()
     }
     setGuideThemeChoice(ThemeChoice::System);
     qunsetenv("GUIDER_UNIT");
+}
+
+void TstGuider::cursorFollowsTouchScreen()
+{
+    GuideWindow w;
+    w.updateCursor();
+    QCOMPARE(w.cursor().shape() == Qt::BlankCursor, GuideWindow::hasTouchScreen());
 }
 
 int main(int argc, char *argv[])

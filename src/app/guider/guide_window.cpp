@@ -1,5 +1,7 @@
 #include "guide_window.h"
 
+#include <QInputDevice>
+
 #include <QApplication>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -828,4 +830,20 @@ void GuideWindow::offerYarnDeduction()
         }
     }
     updateView();
+}
+
+bool GuideWindow::hasTouchScreen()
+{
+    const auto devices = QInputDevice::devices();
+    for (const QInputDevice *device : devices)
+    {
+        if (device->type() == QInputDevice::DeviceType::TouchScreen) return true;
+    }
+    return false;
+}
+
+void GuideWindow::updateCursor()
+{
+    if (hasTouchScreen()) setCursor(Qt::BlankCursor);
+    else unsetCursor();
 }
