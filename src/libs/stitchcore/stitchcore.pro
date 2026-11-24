@@ -24,7 +24,9 @@ HEADERS += \
     stitchgrid.h \
     shaping.h \
     instructions.h \
-    passes.h
+    passes.h \
+    yarn.h \
+    yarn_estimate.h
 
 SOURCES += \
     stitchsize.cpp \
@@ -36,4 +38,6 @@ SOURCES += \
     stitchgrid.cpp \
     shaping.cpp \
     instructions.cpp \
-    passes.cpp
+    passes.cpp \
+    yarn.cpp \
+    yarn_estimate.cpp

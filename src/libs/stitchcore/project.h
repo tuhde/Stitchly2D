@@ -22,6 +22,15 @@ struct ProjectSettings
     ShapingOptions shaping;
 };
 
+/** The yarn a slot of the project is knitted with: kMainYarnSlot or the color name of a color pattern. */
+struct YarnRef
+{
+    QString id;             //!< id in the yarn inventory
+    QString name;           //!< what the yarn was called when it was chosen, for when the inventory lacks it
+    QString colorHex;
+};
+inline bool operator==(const YarnRef &a, const YarnRef &b) { return a.id == b.id && a.name == b.name && a.colorHex == b.colorHex; }
+
 /**
  * @brief A knitting project: which Seamly2D pattern, the stitch settings, and the bands and patterns of each piece.
  *
@@ -37,6 +46,7 @@ struct Project
     QMap<QString, QVector<BandSpec>> bands;              //!< by piece name; pieces without an entry use one default band
     QMap<QString, KnitMethod>        methods;            //!< pieces that are knitted differently from settings.shaping.method
     StitchCatalog                    catalog;            //!< only the entries the bands use
+    QMap<QString, YarnRef>           yarns;              //!< by slot; slots without an entry are chosen in the guider
 };
 
 // Equality, used to tell whether an edit changed anything (undo history, "modified" marker).

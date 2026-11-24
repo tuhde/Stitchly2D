@@ -1835,7 +1835,34 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     </message>
 </context>
 <context>
+    <name>Yarn</name>
+    <message>
+        <source>not a Stitchly2D yarn file</source>
+        <translation>Keine Stitchly2D-Garndatei</translation>
+    </message>
+    <message>
+        <source>yarn file version %1 is newer than this program understands (%2)</source>
+        <translation>Die Version %1 der Garndatei ist neuer, als dieses Programm versteht (%2)</translation>
+    </message>
+    <message>
+        <source>missing or invalid version</source>
+        <translation>Version fehlt oder ist ungültig</translation>
+    </message>
+    <message>
+        <source>yarn number %1 is not valid</source>
+        <translation>Garn Nummer %1 ist ungültig</translation>
+    </message>
+    <message>
+        <source>not a yarn file (%1)</source>
+        <translation>Keine Garndatei (%1)</translation>
+    </message>
+</context>
+<context>
     <name>StitchCore</name>
+    <message>
+        <source>a yarn of the project is not valid</source>
+        <translation>Ein Garn des Projekts ist ungültig</translation>
+    </message>
     <message>
         <source>pattern without a name</source>
         <translation>Muster ohne Namen</translation>

@@ -11,6 +11,8 @@
 #include "shaping.h"
 #include "instructions.h"
 #include "passes.h"
+#include "yarn.h"
+#include "yarn_estimate.h"
 
 using namespace stitchcore;
 
@@ -71,6 +73,11 @@ private slots:
     void passesColourRows();
     void passesTextForTheCounter();
     void methodsInProjects();
+    void yarnInventoryJson();
+    void yarnInventoryRefusals();
+    void yarnConsume();
+    void yarnEstimate();
+    void projectYarns();
     void translationsComplete();
     void instructionsTranslatable();
 };
@@ -1432,6 +1439,152 @@ void TstStitchCore::methodsInProjects()
     pieces["Sleeve"] = QJsonObject();                                      // neither bands nor method
     QVERIFY(!loadProject(write("bad4.stitchly"), q, &error));
     QVERIFY(error.contains("Sleeve"));
+}
+
+static Yarn sampleYarn(const QString &name)
+{
+    Yarn y;
+    y.brand = "Woolly"; y.name = name; y.colorName = "red"; y.colorHex = "#c03030";
+    y.metersPerSkein = 200; y.gramsPerSkein = 50; y.skeinsInStock = 3; y.partialMeters = 40;
+    y.dyeLot = "L42"; y.notes = "from the market";
+    y.gauges.append(YarnGauge{"Stockinette", StitchSize::fromPer10cm(22, 30), 0});
+    y.gauges.append(YarnGauge{"Garter", StitchSize::fromPer10cm(20, 40), 18.5});
+    return y;
+}
+
+void TstStitchCore::yarnInventoryJson()
+{
+    QTemporaryDir dir;
+    YarnInventory inv;
+    const QString id = inv.set(sampleYarn("DK"));
+    QVERIFY(!id.isEmpty());
+    inv.set(sampleYarn("Sock"));
+    QCOMPARE(inv.size(), 2);
+    const QString file = dir.filePath("yarns.json");
+    QString error;
+    QVERIFY2(inv.save(file, &error), qPrintable(error));
+    YarnInventory back;
+    QVERIFY2(YarnInventory::load(file, back, &error), qPrintable(error));
+    QVERIFY(back == inv);
+    QCOMPARE(back.find(id)->displayName(), QString("Woolly DK (red)"));
+    QCOMPARE(back.find(id)->stockMeters(), 640.0);
+    QVERIFY(back.find(id)->gaugeFor("Garter"));
+    QVERIFY(!back.find(id)->gaugeFor("Rib"));
+    QVERIFY(back.remove(id));
+    QVERIFY(!back.remove(id));
+    QVERIFY(back.find(id) == nullptr);
+    // a missing file is an empty inventory
+    YarnInventory none;
+    none.set(sampleYarn("x"));
+    QVERIFY(YarnInventory::load(dir.filePath("nothing.json"), none, &error));
+    QCOMPARE(none.size(), 0);
+}
+
+void TstStitchCore::yarnInventoryRefusals()
+{
+    QTemporaryDir dir;
+    YarnInventory inv;
+    inv.set(sampleYarn("DK"));
+    QJsonObject newer = inv.toJson();
+    newer["version"] = YarnInventory::kFileVersion + 1;
+    YarnInventory out;
+    QString error;
+    QVERIFY(!YarnInventory::fromJson(newer, out, &error));
+    QVERIFY(error.contains("newer"));
+    QJsonObject other = inv.toJson();
+    other["format"] = "something";
+    QVERIFY(!YarnInventory::fromJson(other, out, &error));
+    // a bad color or a negative stock refuses the whole file and changes nothing
+    out.set(sampleYarn("keep"));
+    for (const char *bad : {"colorHex", "skeinsInStock"})
+    {
+        QJsonObject j = inv.toJson();
+        QJsonArray list = j["yarns"].toArray();
+        QJsonObject y = list[0].toObject();
+        y[bad] = QString(bad) == "colorHex" ? QJsonValue("red") : QJsonValue(-1);
+        list[0] = y;
+        j["yarns"] = list;
+        QVERIFY2(!YarnInventory::fromJson(j, out, &error), bad);
+        QVERIFY(error.contains("yarn number 1"));
+        QCOMPARE(out.size(), 1);
+    }
+    // two yarns with one id
+    QJsonObject dup = inv.toJson();
+    QJsonArray list = dup["yarns"].toArray();
+    list.append(list[0]);
+    dup["yarns"] = list;
+    QVERIFY(!YarnInventory::fromJson(dup, out, &error));
+    QVERIFY(error.contains("yarn number 2"));
+}
+
+void TstStitchCore::yarnConsume()
+{
+    Yarn y = sampleYarn("DK");                      // 3 x 200 m + 40 m
+    QVERIFY(consumeYarn(y, 30));
+    QCOMPARE(y.partialMeters, 10.0);
+    QCOMPARE(y.skeinsInStock, 3);
+    QVERIFY(consumeYarn(y, 50));                    // 10 from the opened skein, 40 from a new one
+    QCOMPARE(y.skeinsInStock, 2);
+    QCOMPARE(y.partialMeters, 160.0);
+    QCOMPARE(y.stockMeters(), 560.0);
+    const Yarn before = y;
+    QVERIFY(!consumeYarn(y, 561));
+    QVERIFY(y == before);
+    QVERIFY(!consumeYarn(y, -1));
+    QVERIFY(consumeYarn(y, 560));
+    QCOMPARE(y.stockMeters(), 0.0);
+}
+
+void TstStitchCore::yarnEstimate()
+{
+    const StitchCatalog cat = StitchCatalog::withDefaults();
+    BandSpec band; band.stitchType = "Stockinette";
+    band.overlays.append(Overlay{"Stripes 2 rows"});
+    const StitchGrid grid = StitchGrid::build(rect(100, 70), {band}, cat);     // 20 sts x 20 rows, A and B
+    const QMap<QString, int> counts = stitchesPerSlot(grid);
+    QCOMPARE(counts.value("A"), 200);
+    QCOMPARE(counts.value("B"), 200);
+    QCOMPARE(counts.value(kMainYarnSlot), 0);
+
+    Yarn a = sampleYarn("A");
+    QMap<QString, Yarn> bySlot{{"A", a}};
+    QMap<QString, qreal> meters = estimateYarnMeters(grid, bySlot);
+    QVERIFY(!meters.contains("B"));                                            // no yarn chosen
+    // Stockinette is 5 mm wide: 4 x 5 mm per stitch, 200 stitches, 10 % margin
+    QVERIFY(qAbs(meters.value("A") - 200 * 20.0 / 1000 * 1.1) < 1e-9);
+    // a measured yarn length per stitch is used instead of the default
+    Yarn b = sampleYarn("B");
+    b.gauges[0].yarnPerStitchMm = 30;
+    meters = estimateYarnMeters(grid, {{"A", a}, {"B", b}});
+    QVERIFY(qAbs(meters.value("B") - 200 * 30.0 / 1000 * 1.1) < 1e-9);
+
+    // an all-one-color piece is knitted in the main yarn
+    BandSpec plain; plain.stitchType = "Stockinette";
+    const StitchGrid flat = StitchGrid::build(rect(100, 70), {plain}, cat);
+    QCOMPARE(stitchesPerSlot(flat).value(kMainYarnSlot), 400);
+
+    StitchSize size;
+    QVERIFY(suggestStitchSize(a, "Stockinette", size));
+    QVERIFY(qAbs(size.stitchesPer10cm() - 22) < 1e-9);
+    QVERIFY(!suggestStitchSize(a, "Rib", size));
+}
+
+void TstStitchCore::projectYarns()
+{
+    QTemporaryDir dir;
+    Project p = sampleProject(dir.path());
+    QVERIFY(p.yarns.isEmpty());
+    const QString file = dir.filePath("y.stitchly");
+    QString error;
+    QVERIFY(saveProject(file, p, &error));
+    Project q;
+    QVERIFY(loadProject(file, q, &error));                                      // old-style file: no yarns
+    QVERIFY(q.yarns.isEmpty());
+    p.yarns.insert(kMainYarnSlot, YarnRef{"id-1", "Woolly DK", "#c03030"});
+    p.yarns.insert("CC1", YarnRef{"id-2", "Woolly Sock", QString()});
+    QVERIFY(saveProject(file, p, &error));
+    QVERIFY2(loadProject(file, q, &error), qPrintable(error));
+    QVERIFY(q.yarns == p.yarns);
 }
 
 // Every translation file is complete and keeps the placeholders (%1, %2, ...) of its source text.

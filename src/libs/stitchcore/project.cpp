@@ -157,6 +157,15 @@ bool saveProject(const QString &path, const Project &p, QString *error)
                      {"settings", settings},
                      {"pieces", pieces},
                      {"catalog", p.catalog.toJson()}};
+    if (!p.yarns.isEmpty())
+    {
+        QJsonObject yarns;
+        for (auto it = p.yarns.cbegin(); it != p.yarns.cend(); ++it)
+        {
+            yarns.insert(it.key(), QJsonObject{{"id", it.value().id}, {"name", it.value().name}, {"colorHex", it.value().colorHex}});
+        }
+        root["yarns"] = yarns;
+    }
     if (!p.measurementsFile.isEmpty())
     {
         root["measurements"] = toRelative(path, p.measurementsFile);
@@ -300,6 +309,18 @@ bool loadProject(const QString &path, Project &project, QString *error)
     if (!StitchCatalog::fromJson(root.value("catalog").toObject(), out.catalog))
     {
         return fail(error, QCoreApplication::translate("StitchCore", "the catalog inside the project is not valid"));
+    }
+    // Optional: files from before yarns existed have none.
+    const QJsonObject yarns = root.value("yarns").toObject();
+    for (auto it = yarns.constBegin(); it != yarns.constEnd(); ++it)
+    {
+        const QJsonObject y = it.value().toObject();
+        YarnRef ref{y.value("id").toString(), y.value("name").toString(), y.value("colorHex").toString()};
+        if (it.key().isEmpty() || ref.id.isEmpty())
+        {
+            return fail(error, QCoreApplication::translate("StitchCore", "a yarn of the project is not valid"));
+        }
+        out.yarns.insert(it.key(), ref);
     }
     project = out;
     return true;
