@@ -1,5 +1,7 @@
 #include "yarn_estimate.h"
 
+#include "project.h"        // kDefaultStitchName
+
 namespace stitchcore
 {
 
@@ -31,19 +33,21 @@ qreal yarnForStitches(const Yarn &yarn, const QString &stitchType, const StitchS
     return perStitch * stitches / 1000.0;
 }
 
-QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot)
+QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot,
+                                        const QString &defaultStitchType)
 {
     QMap<QString, qreal> meters;
     const QString mainSlot = QString::fromLatin1(kMainYarnSlot);
     for (const Row &row : grid.rows())
     {
         const GridBand &band = grid.bands().at(row.band);
+        const QString stitchType = band.stitchType == QLatin1String(kDefaultStitchName) ? defaultStitchType : band.stitchType;
         int coloured = 0;
         auto add = [&](const QString &slot, int count) {
             auto it = yarnBySlot.constFind(slot);
             if (it != yarnBySlot.constEnd())
             {
-                meters[slot] += yarnForStitches(it.value(), band.stitchType, band.size, count);
+                meters[slot] += yarnForStitches(it.value(), stitchType, band.size, count);
             }
         };
         for (const Run &run : grid.overlayRuns(row.index))

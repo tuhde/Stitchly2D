@@ -17,4 +17,5 @@ SUBDIRS = \
     tools \
     vmcp \
     stitchcore \
-    stitchload
+    stitchload \
+    yarnui

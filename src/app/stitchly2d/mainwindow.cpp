@@ -39,6 +39,9 @@
 #include <QVBoxLayout>
 
 #include "catalog_dialog.h"
+#include "../../libs/yarnui/yarn_inventory_widget.h"
+#include "../../libs/yarnui/yarn_picker.h"
+#include "../../libs/stitchcore/yarn_estimate.h"
 #include "../stitchload/core/application_2d.h"
 #include "core/cli.h"
 #include "mcp/mcp_integration.h"
@@ -120,6 +123,11 @@ MainWindow::MainWindow()
     if (QFile::exists(catalogPath()) && StitchCatalog::load(catalogPath(), user))
     {
         m_catalog = user;
+    }
+
+    if (!YarnInventory::load(userYarnPath(), m_yarnInventory, &m_yarnLoadError))
+    {
+        m_yarnInventory = YarnInventory();      // not overwritten before the user has been asked, see editYarns()
     }
 
     m_scene = new VMainGraphicsScene(this);
@@ -264,6 +272,10 @@ void MainWindow::createActions()
     QMenu *catalogMenu = menuBar()->addMenu(tr("&Catalog"));
     QAction *editCat = catalogMenu->addAction(themeIcon("list-add"), tr("&Edit catalog (stitches and patterns)..."),
                                               this, &MainWindow::editCatalog);
+
+    // ---- Yarns
+    QMenu *yarnMenu = menuBar()->addMenu(tr("&Yarns"));
+    yarnMenu->addAction(themeIcon("list-add"), tr("&Edit yarns (inventory)..."), this, &MainWindow::editYarns);
 
     // ---- View: zoom actions like Seamly2D's zoom toolbar
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
@@ -619,6 +631,22 @@ void MainWindow::createDocks()
     connect(m_removeOverlay, &QPushButton::clicked, this, &MainWindow::removeOverlay);
     connect(m_bandTable, &QTableWidget::itemSelectionChanged, this, &MainWindow::bandSelected);
 
+    // Yarns
+    m_yarnPanel = new QWidget;
+    auto *yarnLayout = new QVBoxLayout(m_yarnPanel);
+    m_yarnForm = new QFormLayout;
+    yarnLayout->addLayout(m_yarnForm);
+    yarnLayout->addStretch(1);
+    m_yarnDock = new QDockWidget(tr("Yarns"), this);
+    m_yarnDock->setObjectName(QStringLiteral("yarnsDock"));
+    m_yarnDock->setWidget(m_yarnPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_yarnDock);
+    tabifyDockWidget(bandsDock, m_yarnDock);
+    settingsDock->raise();
+    connect(m_yarnDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+        if (visible) updateYarnPanel();        // the estimate builds the grid of every piece, so only while it is shown
+    });
+
     // Instructions
     m_instructions = new QPlainTextEdit;
     m_instructions->setReadOnly(true);
@@ -698,6 +726,7 @@ bool MainWindow::openPattern(const QString &fileName, QString *error, const QStr
     m_projectFile.clear();
     m_bands.clear();
     m_methods.clear();
+    m_yarns.clear();
     m_updating = true;
     m_pieces->clear();
     for (const LoadedPiece &p : m_pattern.pieces)
@@ -1110,6 +1139,12 @@ void MainWindow::refresh()
     {
         return;
     }
+    // The yarn panel is brought up to date once the rest is done, whichever way this function ends.
+    struct YarnPanelUpdate
+    {
+        MainWindow *w;
+        ~YarnPanelUpdate() { if (w->m_yarnDock && w->m_yarnDock->isVisible()) w->updateYarnPanel(); }
+    } yarnPanelUpdate{this};
     const StitchSize size = currentSize();
     m_gauge->setText(tr("%1 sts x %2 rows per 10 cm\n%3 sts x %4 rows per inch")
                          .arg(size.stitchesPer10cm(), 0, 'f', 1).arg(size.rowsPer10cm(), 0, 'f', 1)
@@ -1269,6 +1304,7 @@ bool MainWindow::saveProject(const QString &fileName, QString *error)
         p.methods.insert(it.key(), static_cast<KnitMethod>(it.value()));
     }
     p.catalog = usedCatalog(m_catalog, p.bands);
+    p.yarns = m_yarns;
     if (!stitchcore::saveProject(fileName, p, error))
     {
         return false;
@@ -1332,6 +1368,7 @@ bool MainWindow::openProject(const QString &fileName, QString *error, CatalogCon
     {
         m_methods.insert(it.key(), int(it.value()));
     }
+    m_yarns = p.yarns;
     m_projectFile = fileName;
     populateBandTables();
     refresh();
@@ -1468,6 +1505,230 @@ void MainWindow::setCatalog(const StitchCatalog &catalog, const QString &undoTex
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Yarns
+
+void MainWindow::setYarnInventory(const YarnInventory &inventory)
+{
+    m_yarnInventory = inventory;
+    m_yarnLoadError.clear();
+    for (auto it = m_yarns.begin(); it != m_yarns.end(); ++it)
+    {
+        // the snapshot of a yarn follows the inventory (renamed, recolored)
+        if (const Yarn *y = m_yarnInventory.find(it.value().id))
+        {
+            it.value().name = y->displayName();
+            it.value().colorHex = y->colorHex;
+        }
+    }
+    if (m_yarnDock && m_yarnDock->isVisible()) updateYarnPanel();
+}
+
+bool MainWindow::setYarn(const QString &slot, const QString &yarnId, QString *error, const QString &undoText)
+{
+    if (slot.isEmpty())
+    {
+        if (error) *error = tr("A yarn slot needs a name.");
+        return false;
+    }
+    if (yarnId.isEmpty())
+    {
+        m_yarns.remove(slot);
+    }
+    else
+    {
+        const Yarn *y = m_yarnInventory.find(yarnId);
+        if (!y)
+        {
+            if (error) *error = tr("There is no yarn with this id in the inventory.");
+            return false;
+        }
+        m_yarns.insert(slot, YarnRef{y->id, y->displayName(), y->colorHex});
+    }
+    if (m_yarnDock && m_yarnDock->isVisible()) updateYarnPanel();
+    recordChange(undoText.isEmpty() ? tr("Choose yarn for %1").arg(slot) : undoText);
+    return true;
+}
+
+QVector<MainWindow::YarnLine> MainWindow::yarnReport() const
+{
+    QMap<QString, Yarn> bySlot;
+    for (auto it = m_yarns.cbegin(); it != m_yarns.cend(); ++it)
+    {
+        if (const Yarn *y = m_yarnInventory.find(it.value().id)) bySlot.insert(it.key(), *y);
+    }
+    QMap<QString, int> stitches;
+    QMap<QString, qreal> needed;
+    const QString defaultStitch = settings().stitchType;
+    for (const LoadedPiece &piece : m_pattern.pieces)
+    {
+        const StitchGrid grid = gridFor(piece);
+        if (grid.isEmpty()) continue;
+        const QMap<QString, int> counts = stitchesPerSlot(grid);
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it) stitches[it.key()] += it.value();
+        const QMap<QString, qreal> meters = estimateYarnMeters(grid, bySlot, defaultStitch);
+        for (auto it = meters.cbegin(); it != meters.cend(); ++it) needed[it.key()] += it.value();
+    }
+    // A yarn used in several slotNames has to last for all of them.
+    QMap<QString, qreal> neededByYarn;
+    for (auto it = needed.cbegin(); it != needed.cend(); ++it)
+    {
+        neededByYarn[m_yarns.value(it.key()).id] += it.value();
+    }
+    QStringList slotNames;
+    const QString mainSlot = QString::fromLatin1(kMainYarnSlot);
+    if (stitches.value(mainSlot) > 0 || stitches.isEmpty()) slotNames << mainSlot;
+    for (auto it = stitches.cbegin(); it != stitches.cend(); ++it)
+    {
+        if (it.key() != mainSlot && it.value() > 0) slotNames << it.key();
+    }
+    if (m_pattern.pieces.isEmpty()) slotNames = QStringList{mainSlot};
+
+    QVector<YarnLine> lines;
+    for (const QString &slot : slotNames)
+    {
+        YarnLine line;
+        line.slot = slot;
+        line.stitches = stitches.value(slot);
+        const YarnRef ref = m_yarns.value(slot);
+        line.yarnId = ref.id;
+        line.yarnName = ref.name;
+        if (const Yarn *y = m_yarnInventory.find(ref.id))
+        {
+            line.yarnName = y->displayName();
+            line.stockMeters = y->stockMeters();
+            line.neededMeters = needed.value(slot);
+            line.enough = y->stockMeters() + 1e-9 >= neededByYarn.value(ref.id);
+        }
+        lines.append(line);
+    }
+    return lines;
+}
+
+int MainWindow::useYarnGauge(QString *error)
+{
+    const YarnRef ref = m_yarns.value(QString::fromLatin1(kMainYarnSlot));
+    const Yarn *y = m_yarnInventory.find(ref.id);
+    if (!y)
+    {
+        if (error) *error = tr("Choose a main yarn first.");
+        return 0;
+    }
+    StitchCatalog c = m_catalog;
+    int changed = 0;
+    for (const YarnGauge &g : y->gauges)
+    {
+        if (!c.basics().contains(g.stitchType)) continue;
+        c.basics().set({g.stitchType, g.size});
+        ++changed;
+    }
+    if (changed == 0)
+    {
+        if (error) *error = tr("%1 has no gauge for a stitch of the catalog.").arg(y->displayName());
+        return 0;
+    }
+    setCatalog(c, tr("Use gauge of %1").arg(y->displayName()));
+    return changed;
+}
+
+void MainWindow::updateYarnPanel()
+{
+    if (!m_yarnForm)
+    {
+        return;
+    }
+    while (m_yarnForm->rowCount() > 0)
+    {
+        QFormLayout::TakeRowResult row = m_yarnForm->takeRow(0);
+        for (QLayoutItem *item : {row.labelItem, row.fieldItem})
+        {
+            if (item && item->widget()) item->widget()->deleteLater();
+            delete item;
+        }
+    }
+    const QVector<YarnLine> lines = yarnReport();
+    for (const YarnLine &line : lines)
+    {
+        auto *combo = new QComboBox;
+        combo->setObjectName(QStringLiteral("yarnCombo_%1").arg(line.slot));
+        const YarnRef ref = m_yarns.value(line.slot);
+        yarnui::fillYarnCombo(combo, m_yarnInventory, ref.id, ref.name, ref.colorHex);
+        const QString slot = line.slot;
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, slot]() {
+            QString error;
+            if (!setYarn(slot, yarnui::selectedYarnId(combo), &error))
+            {
+                QMessageBox::warning(this, tr("Yarns"), error);
+            }
+        });
+        auto *box = new QWidget;
+        auto *boxLayout = new QVBoxLayout(box);
+        boxLayout->setContentsMargins(0, 0, 0, 0);
+        boxLayout->addWidget(combo);
+        auto *info = new QLabel;
+        info->setObjectName(QStringLiteral("yarnInfo_%1").arg(line.slot));
+        info->setWordWrap(true);
+        if (!line.yarnId.isEmpty() && m_yarnInventory.find(line.yarnId))
+        {
+            info->setText(tr("%1 stitches, about %2 m needed, %3 m in stock").arg(line.stitches)
+                              .arg(line.neededMeters, 0, 'f', 0).arg(line.stockMeters, 0, 'f', 0));
+            if (!line.enough) info->setStyleSheet(QStringLiteral("color: #c0392b;"));
+        }
+        else
+        {
+            info->setText(tr("%1 stitches").arg(line.stitches));
+        }
+        boxLayout->addWidget(info);
+        m_yarnForm->addRow(line.slot == QLatin1String(kMainYarnSlot) ? tr("Main yarn") : line.slot, box);
+    }
+    auto *buttons = new QWidget;
+    auto *buttonLayout = new QHBoxLayout(buttons);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    auto *gauge = new QPushButton(tr("Use yarn gauge"));
+    gauge->setObjectName(QStringLiteral("useYarnGaugeButton"));
+    gauge->setToolTip(tr("Set the stitch sizes of the catalog to what the main yarn knits to."));
+    auto *edit = new QPushButton(tr("Edit yarns..."));
+    edit->setObjectName(QStringLiteral("editYarnsButton"));
+    buttonLayout->addWidget(gauge);
+    buttonLayout->addWidget(edit);
+    m_yarnForm->addRow(buttons);
+    connect(gauge, &QPushButton::clicked, this, [this]() {
+        QString error;
+        const int n = useYarnGauge(&error);
+        statusBar()->showMessage(n > 0 ? tr("Gauge of the yarn applied to %1 stitches").arg(n) : error, 5000);
+    });
+    connect(edit, &QPushButton::clicked, this, &MainWindow::editYarns);
+}
+
+void MainWindow::editYarns()
+{
+    QStringList stitchTypes;
+    for (const StitchType &t : m_catalog.basics().types()) stitchTypes << t.name;
+    yarnui::YarnInventoryDialog dialog(m_yarnInventory, stitchTypes, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+    if (!m_yarnLoadError.isEmpty()
+        && QMessageBox::question(this, tr("Yarns"),
+                                 tr("The yarn file %1 could not be read (%2). Saving replaces it. Save anyway?")
+                                     .arg(userYarnPath(), m_yarnLoadError)) != QMessageBox::Yes)
+    {
+        return;
+    }
+    QDir().mkpath(QFileInfo(userYarnPath()).absolutePath());
+    QString error;
+    if (dialog.inventory().save(userYarnPath(), &error))
+    {
+        setYarnInventory(dialog.inventory());
+        statusBar()->showMessage(tr("Yarns saved"), 5000);
+    }
+    else
+    {
+        QMessageBox::warning(this, tr("Yarns"), tr("The yarns could not be saved to %1: %2").arg(userYarnPath(), error));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // History, unsaved changes
 
 MainWindow::State MainWindow::captureState() const
@@ -1477,12 +1738,13 @@ MainWindow::State MainWindow::captureState() const
     s.bands = m_bands;
     s.catalog = m_catalog;
     s.methods = m_methods;
+    s.yarns = m_yarns;
     return s;
 }
 
 bool MainWindow::sameState(const State &a, const State &b)
 {
-    return a.settings == b.settings && a.bands == b.bands && a.methods == b.methods && sameCatalog(a.catalog, b.catalog);
+    return a.settings == b.settings && a.bands == b.bands && a.methods == b.methods && a.yarns == b.yarns && sameCatalog(a.catalog, b.catalog);
 }
 
 void MainWindow::applyState(const State &state)
@@ -1492,6 +1754,7 @@ void MainWindow::applyState(const State &state)
     setSettings(state.settings);
     m_bands = state.bands;
     m_methods = state.methods;
+    m_yarns = state.yarns;
     populateBandTables();
     refresh();
     --m_suppress;

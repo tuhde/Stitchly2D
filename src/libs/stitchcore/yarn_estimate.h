@@ -27,9 +27,11 @@ qreal yarnForStitches(const Yarn &yarn, const QString &stitchType, const StitchS
 
 /**
  * Meters (with margin) every slot needs. Slots without a yarn in the map are left out.
- * Uses the gauge the yarn has for the band's basic stitch.
+ * Uses the gauge the yarn has for the band's basic stitch. A band that uses the "Default stitch" counts as
+ * defaultStitchType (the stitch named in the project settings; empty = custom size, no gauge applies).
  */
-QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot);
+QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot,
+                                        const QString &defaultStitchType = QString());
 
 /** The stitch size a yarn gives with the basic stitch; false if the yarn has no gauge for it. */
 bool suggestStitchSize(const Yarn &yarn, const QString &stitchType, StitchSize &size);

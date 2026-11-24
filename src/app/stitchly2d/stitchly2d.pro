@@ -33,7 +33,7 @@ unix:!macx {
 }
 
 # Static libraries. Several of them refer to each other, so link them as a group.
-LIBNAMES = vmcp tools vtools vwidgets vformat vpatterndb fervor ifc vmisc vgeometry vlayout qmuparser vpropertyexplorer vobj vdxf stitchload stitchcore
+LIBNAMES = vmcp tools vtools vwidgets vformat vpatterndb fervor ifc vmisc vgeometry vlayout qmuparser vpropertyexplorer vobj vdxf stitchload stitchcore yarnui
 unix: LIBS += -Wl,--start-group
 for(lib, LIBNAMES) {
     LIBS += -L$$OUT_PWD/../../libs/$${lib}/$${DESTDIR}/ -l$${lib}

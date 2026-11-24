@@ -15,11 +15,13 @@ include(../../src/app/stitchly2d/stitchly2d.pri)
 SOURCES += \
     $$files($$PWD/../../src/libs/stitchcore/*.cpp) \
     $$files($$PWD/../../src/libs/stitchload/core/*.cpp) \
-    $$files($$PWD/../../src/libs/stitchload/xml/*.cpp)
+    $$files($$PWD/../../src/libs/stitchload/xml/*.cpp) \
+    $$files($$PWD/../../src/libs/yarnui/*.cpp)
 HEADERS += \
     $$files($$PWD/../../src/libs/stitchcore/*.h) \
     $$files($$PWD/../../src/libs/stitchload/core/*.h) \
-    $$files($$PWD/../../src/libs/stitchload/xml/*.h)
+    $$files($$PWD/../../src/libs/stitchload/xml/*.h) \
+    $$files($$PWD/../../src/libs/yarnui/*.h)
 
 # guider (its own program, same translation files)
 SOURCES += $$files($$PWD/../../src/app/guider/*.cpp)

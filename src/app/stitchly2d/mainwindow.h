@@ -14,11 +14,14 @@
 #include "../../libs/stitchcore/project.h"
 #include "../../libs/stitchcore/shaping.h"
 #include "../../libs/stitchcore/stitchgrid.h"
+#include "../../libs/stitchcore/yarn.h"
 
 class McpIntegration;
 class QCheckBox;
 class QComboBox;
+class QDockWidget;
 class QDoubleSpinBox;
+class QFormLayout;
 class QLabel;
 class QPushButton;
 class QTableWidget;
@@ -109,6 +112,34 @@ public:
 
     const stitchcore::StitchCatalog &catalog() const { return m_catalog; }
 
+    // ---- Yarns
+    /** The user's yarns (yarns.json). Replacing them here does not touch the file; the Yarns dialog saves it. */
+    const stitchcore::YarnInventory &yarnInventory() const { return m_yarnInventory; }
+    void setYarnInventory(const stitchcore::YarnInventory &inventory);
+    /** The yarn chosen for each slot ("main", or the color name of a color pattern). */
+    QMap<QString, stitchcore::YarnRef> yarnRefs() const { return m_yarns; }
+    /** Choose a yarn of the inventory for a slot; an empty id takes the yarn off the slot. */
+    bool setYarn(const QString &slot, const QString &yarnId, QString *error = nullptr, const QString &undoText = QString());
+
+    /** One yarn slot of the project: what it is knitted with and how much yarn the whole project needs from it. */
+    struct YarnLine
+    {
+        QString slot;
+        QString yarnId;               //!< empty = no yarn chosen
+        QString yarnName;
+        int     stitches = 0;         //!< stitches of all pieces knitted in this slot
+        qreal   neededMeters = 0;     //!< 0 without a yarn
+        qreal   stockMeters = 0;
+        bool    enough = true;        //!< false if the stock of the yarn (all its slots together) is not enough
+    };
+    /** Slots used by the pieces, "main" first, with the yarn need of the current settings and bands. */
+    QVector<YarnLine> yarnReport() const;
+    /**
+     * Take the gauge of the "main" yarn for every basic stitch it has one for (stitch width and row height of
+     * the catalog entries; the settings follow if they use such a stitch). Returns the number of stitches changed.
+     */
+    int useYarnGauge(QString *error = nullptr);
+
     /**
      * Use a new catalog. Bands that use a basic stitch which is gone fall back to the default stitch, and patterns
      * that are gone are taken off the bands.
@@ -126,6 +157,7 @@ private slots:
     void preferences();
     void openRecent(const QString &fileName);
     void editCatalog();
+    void editYarns();
     void openProjectDialog();
     void saveProjectAction();
     void saveProjectAs();
@@ -157,6 +189,7 @@ private:
         QHash<QString, QVector<stitchcore::BandSpec>>          bands;
         QHash<QString, int>                                    methods;     //!< pieces with their own knitting method
         stitchcore::StitchCatalog                              catalog;
+        QMap<QString, stitchcore::YarnRef>                     yarns;
     };
     State captureState() const;
     void applyState(const State &state);
@@ -181,6 +214,7 @@ private:
     stitchcore::StitchGrid gridFor(const LoadedPiece &piece, QPolygonF *outline = nullptr) const;
     void populateBandTables();
     void populateOverlayTable();
+    void updateYarnPanel();
     void showGrid(const QPolygonF &outline, const stitchcore::StitchGrid &grid);
     bool saveText(const QString &title, const QString &filter, const QString &suggested, const QString &text);
 
@@ -212,6 +246,12 @@ private:
     QPushButton        *m_removeBand = nullptr;
     QPushButton        *m_addOverlay = nullptr;
     QPushButton        *m_removeOverlay = nullptr;
+    stitchcore::YarnInventory m_yarnInventory;
+    QString             m_yarnLoadError;     //!< why yarns.json could not be read; it is then not overwritten without asking
+    QMap<QString, stitchcore::YarnRef> m_yarns;   //!< by slot
+    QDockWidget        *m_yarnDock = nullptr;
+    QWidget            *m_yarnPanel = nullptr;
+    QFormLayout        *m_yarnForm = nullptr;
     QPlainTextEdit     *m_instructions = nullptr;
     bool                m_updating = false;
     QMenu              *m_viewMenu = nullptr;

@@ -85,7 +85,8 @@ The names of the catalog's stitches and patterns, the CSV header and the tool de
 | Path | Content |
 |---|---|
 | `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, `vmcp`, ...). Kept unmodified where possible so changes can be compared with upstream. |
-| `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping (planned). |
+| `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping, yarn inventory and yarn estimate. |
+| `src/libs/yarnui/` | Widgets of the yarn inventory (editor and yarn list), shared by the editor and the yarn program (planned). |
 | `src/app/stitchly2d/` | The program: main window, pattern loader (running Seamly2D's parser without a window) and the `--cli` mode. The main window. |
 | `docs/PLAN.md` | Design and roadmap. |
 | `NOTICE` | Which Seamly2D commit the libraries come from. |

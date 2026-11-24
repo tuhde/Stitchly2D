@@ -1349,6 +1349,82 @@ Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
         <source>How the pieces are knitted, unless a piece has its own method (Bands and patterns). Round, circular machine and the tubular double-bed machine knit a tube: the width of the piece is the circumference, and there are no inside rows. The flat double-bed machine knits back and forth with both beds.</source>
         <translation>Wie die Teile gestrickt werden, sofern ein Teil keine eigene Methode hat (Abschnitte und Muster). In Runden, Rundstrick- und Doppelbettmaschine (Schlauch) stricken einen Schlauch: Die Breite des Teils ist der Umfang, und es gibt keine Rückreihen. Die flache Doppelbettmaschine strickt hin und zurück mit beiden Betten.</translation>
     </message>
+    <message>
+        <source>&amp;Yarns</source>
+        <translation>&amp;Garne</translation>
+    </message>
+    <message>
+        <source>&amp;Edit yarns (inventory)...</source>
+        <translation>Garne (&amp;Bestand) bearbeiten...</translation>
+    </message>
+    <message>
+        <source>Yarns</source>
+        <translation>Garne</translation>
+    </message>
+    <message>
+        <source>A yarn slot needs a name.</source>
+        <translation>Ein Garnplatz braucht einen Namen.</translation>
+    </message>
+    <message>
+        <source>There is no yarn with this id in the inventory.</source>
+        <translation>Im Bestand gibt es kein Garn mit dieser Kennung.</translation>
+    </message>
+    <message>
+        <source>Choose yarn for %1</source>
+        <translation>Garn für %1 wählen</translation>
+    </message>
+    <message>
+        <source>Choose a main yarn first.</source>
+        <translation>Wähle zuerst ein Hauptgarn.</translation>
+    </message>
+    <message>
+        <source>%1 has no gauge for a stitch of the catalog.</source>
+        <translation>%1 hat keine Maschenprobe für eine Masche des Katalogs.</translation>
+    </message>
+    <message>
+        <source>Use gauge of %1</source>
+        <translation>Maschenprobe von %1 verwenden</translation>
+    </message>
+    <message>
+        <source>%1 stitches, about %2 m needed, %3 m in stock</source>
+        <translation>%1 Maschen, etwa %2 m nötig, %3 m vorrätig</translation>
+    </message>
+    <message>
+        <source>%1 stitches</source>
+        <translation>%1 Maschen</translation>
+    </message>
+    <message>
+        <source>Main yarn</source>
+        <translation>Hauptgarn</translation>
+    </message>
+    <message>
+        <source>Use yarn gauge</source>
+        <translation>Maschenprobe des Garns verwenden</translation>
+    </message>
+    <message>
+        <source>Set the stitch sizes of the catalog to what the main yarn knits to.</source>
+        <translation>Setzt die Maschengrößen des Katalogs auf das, was das Hauptgarn ergibt.</translation>
+    </message>
+    <message>
+        <source>Edit yarns...</source>
+        <translation>Garne bearbeiten...</translation>
+    </message>
+    <message>
+        <source>Gauge of the yarn applied to %1 stitches</source>
+        <translation>Maschenprobe des Garns für %1 Maschenarten übernommen</translation>
+    </message>
+    <message>
+        <source>The yarn file %1 could not be read (%2). Saving replaces it. Save anyway?</source>
+        <translation>Die Garndatei %1 konnte nicht gelesen werden (%2). Beim Speichern wird sie ersetzt. Trotzdem speichern?</translation>
+    </message>
+    <message>
+        <source>Yarns saved</source>
+        <translation>Garne gespeichert</translation>
+    </message>
+    <message>
+        <source>The yarns could not be saved to %1: %2</source>
+        <translation>Die Garne konnten nicht in %1 gespeichert werden: %2</translation>
+    </message>
 </context>
 <context>
     <name>McpIntegration</name>
@@ -1835,29 +1911,6 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     </message>
 </context>
 <context>
-    <name>Yarn</name>
-    <message>
-        <source>not a Stitchly2D yarn file</source>
-        <translation>Keine Stitchly2D-Garndatei</translation>
-    </message>
-    <message>
-        <source>yarn file version %1 is newer than this program understands (%2)</source>
-        <translation>Die Version %1 der Garndatei ist neuer, als dieses Programm versteht (%2)</translation>
-    </message>
-    <message>
-        <source>missing or invalid version</source>
-        <translation>Version fehlt oder ist ungültig</translation>
-    </message>
-    <message>
-        <source>yarn number %1 is not valid</source>
-        <translation>Garn Nummer %1 ist ungültig</translation>
-    </message>
-    <message>
-        <source>not a yarn file (%1)</source>
-        <translation>Keine Garndatei (%1)</translation>
-    </message>
-</context>
-<context>
     <name>StitchCore</name>
     <message>
         <source>a yarn of the project is not valid</source>
@@ -2248,6 +2301,29 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     </message>
 </context>
 <context>
+    <name>Yarn</name>
+    <message>
+        <source>not a Stitchly2D yarn file</source>
+        <translation>Keine Stitchly2D-Garndatei</translation>
+    </message>
+    <message>
+        <source>yarn file version %1 is newer than this program understands (%2)</source>
+        <translation>Die Version %1 der Garndatei ist neuer, als dieses Programm versteht (%2)</translation>
+    </message>
+    <message>
+        <source>missing or invalid version</source>
+        <translation>Version fehlt oder ist ungültig</translation>
+    </message>
+    <message>
+        <source>yarn number %1 is not valid</source>
+        <translation>Garn Nummer %1 ist ungültig</translation>
+    </message>
+    <message>
+        <source>not a yarn file (%1)</source>
+        <translation>Keine Garndatei (%1)</translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
         <source>Prepares Seamly2D patterns for knitting.</source>
@@ -2380,6 +2456,195 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>Simulated counter: one pulse every this many ms (default 1000, 0 = never).</source>
         <translation>Simulierter Zähler: ein Impuls alle so viele ms (Standard 1000, 0 = nie).</translation>
+    </message>
+</context>
+<context>
+    <name>yarnui</name>
+    <message>
+        <source>(no yarn)</source>
+        <translation>(kein Garn)</translation>
+    </message>
+    <message>
+        <source>%1 (not in your inventory)</source>
+        <translation>%1 (nicht in deinem Bestand)</translation>
+    </message>
+</context>
+<context>
+    <name>yarnui::YarnInventoryDialog</name>
+    <message>
+        <source>Yarns</source>
+        <translation>Garne</translation>
+    </message>
+</context>
+<context>
+    <name>yarnui::YarnInventoryWidget</name>
+    <message>
+        <source>Add</source>
+        <translation>Hinzufügen</translation>
+    </message>
+    <message>
+        <source>Duplicate</source>
+        <translation>Duplizieren</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Entfernen</translation>
+    </message>
+    <message>
+        <source>e.g. merino 80%, nylon 20%</source>
+        <translation>z. B. Merino 80 %, Nylon 20 %</translation>
+    </message>
+    <message>
+        <source>e.g. fingering, DK, aran</source>
+        <translation>z. B. Sockengarn, DK, Aran</translation>
+    </message>
+    <message>
+        <source>Pick...</source>
+        <translation>Wählen...</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>Durchsuchen...</translation>
+    </message>
+    <message>
+        <source> m</source>
+        <translation> m</translation>
+    </message>
+    <message>
+        <source> g</source>
+        <translation> g</translation>
+    </message>
+    <message>
+        <source>Brand</source>
+        <translation>Marke</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Name</translation>
+    </message>
+    <message>
+        <source>Fiber</source>
+        <translation>Faser</translation>
+    </message>
+    <message>
+        <source>Weight</source>
+        <translation>Stärke</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>Farbe</translation>
+    </message>
+    <message>
+        <source>Color value</source>
+        <translation>Farbwert</translation>
+    </message>
+    <message>
+        <source>Photo</source>
+        <translation>Foto</translation>
+    </message>
+    <message>
+        <source>Dye lot</source>
+        <translation>Färbepartie</translation>
+    </message>
+    <message>
+        <source>Length per skein</source>
+        <translation>Länge pro Knäuel</translation>
+    </message>
+    <message>
+        <source>Weight per skein</source>
+        <translation>Gewicht pro Knäuel</translation>
+    </message>
+    <message>
+        <source>Skeins in stock</source>
+        <translation>Knäuel vorrätig</translation>
+    </message>
+    <message>
+        <source>Left on an opened skein</source>
+        <translation>Rest auf angebrochenem Knäuel</translation>
+    </message>
+    <message>
+        <source>In stock</source>
+        <translation>Vorrat</translation>
+    </message>
+    <message>
+        <source>Notes</source>
+        <translation>Notizen</translation>
+    </message>
+    <message>
+        <source>What this yarn knits to with a basic stitch (swatch, per 10 cm). Yarn per stitch is optional: measure it for a better estimate.</source>
+        <translation>Was dieses Garn mit einer Grundmasche ergibt (Maschenprobe, pro 10 cm). Garn pro Masche ist optional: Miss es für eine bessere Schätzung.</translation>
+    </message>
+    <message>
+        <source>Stitch</source>
+        <translation>Masche</translation>
+    </message>
+    <message>
+        <source>Stitches</source>
+        <translation>Maschen</translation>
+    </message>
+    <message>
+        <source>Rows</source>
+        <translation>Reihen</translation>
+    </message>
+    <message>
+        <source>Yarn per stitch</source>
+        <translation>Garn pro Masche</translation>
+    </message>
+    <message>
+        <source>Add gauge</source>
+        <translation>Maschenprobe hinzufügen</translation>
+    </message>
+    <message>
+        <source>Remove gauge</source>
+        <translation>Maschenprobe entfernen</translation>
+    </message>
+    <message>
+        <source>(unnamed)</source>
+        <translation>(ohne Namen)</translation>
+    </message>
+    <message>
+        <source>%1 m</source>
+        <translation>%1 m</translation>
+    </message>
+    <message>
+        <source> mm</source>
+        <translation> mm</translation>
+    </message>
+    <message>
+        <source>estimate</source>
+        <translation>Schätzung</translation>
+    </message>
+    <message>
+        <source>New yarn</source>
+        <translation>Neues Garn</translation>
+    </message>
+    <message>
+        <source>%1 (copy)</source>
+        <translation>%1 (Kopie)</translation>
+    </message>
+    <message>
+        <source>Remove yarn</source>
+        <translation>Garn entfernen</translation>
+    </message>
+    <message>
+        <source>Remove %1 from the inventory?</source>
+        <translation>%1 aus dem Bestand entfernen?</translation>
+    </message>
+    <message>
+        <source>Yarn color</source>
+        <translation>Garnfarbe</translation>
+    </message>
+    <message>
+        <source>Photo of the yarn</source>
+        <translation>Foto des Garns</translation>
+    </message>
+    <message>
+        <source>Images (*.png *.jpg *.jpeg *.bmp *.webp)</source>
+        <translation>Bilder (*.png *.jpg *.jpeg *.bmp *.webp)</translation>
+    </message>
+    <message>
+        <source>Every yarn needs a brand or a name.</source>
+        <translation>Jedes Garn braucht eine Marke oder einen Namen.</translation>
     </message>
 </context>
 </TS>

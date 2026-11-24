@@ -6,6 +6,7 @@
 #include <QDockWidget>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
@@ -27,6 +28,8 @@
 #include "../../app/stitchly2d/mcp/mcp_integration.h"
 #include "../../libs/vmcp/mcptoolregistry.h"
 #include "../../app/stitchly2d/catalog_dialog.h"
+#include "../../libs/yarnui/yarn_inventory_widget.h"
+#include "../../libs/stitchcore/yarn_estimate.h"
 #include "../../libs/stitchload/core/application_2d.h"
 #include "../../app/stitchly2d/mainwindow.h"
 
@@ -72,6 +75,11 @@ private slots:
     void methodMachineNeedles();
     void methodInProjects();
     void methodTools();
+    void yarnsChosenAndReported();
+    void yarnsInProjects();
+    void yarnGaugeSetsStitchSizes();
+    void yarnPanel();
+    void yarnInventoryEditor();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -1256,6 +1264,179 @@ void TstMainWindow::methodTools()
     // Claude can take it back
     QVERIFY(call("undo").text.contains("Claude: Change stitch settings"));
     QVERIFY(window->settings().shaping.method == KnitMethod::Flat);
+}
+
+namespace
+{
+Yarn makeYarn(const QString &name, qreal stockMeters, bool withGauge)
+{
+    Yarn y;
+    y.id = Yarn::newId();
+    y.brand = "Woolly"; y.name = name; y.colorName = "red"; y.colorHex = "#c03030";
+    y.metersPerSkein = stockMeters; y.skeinsInStock = 1;
+    if (withGauge)
+    {
+        y.gauges.append(YarnGauge{"Stockinette", StitchSize::fromPer10cm(25, 30), 0});
+        y.gauges.append(YarnGauge{"No such stitch", StitchSize::fromPer10cm(20, 30), 0});
+    }
+    return y;
+}
+}
+
+void TstMainWindow::yarnsChosenAndReported()
+{
+    YarnInventory inv;
+    const QString small = inv.set(makeYarn("Small", 100, false));
+    const QString big = inv.set(makeYarn("Big", 100000, false));
+    window->setYarnInventory(inv);
+    // a stripe pattern on the cuff makes the colors A and B yarn slotNames of their own
+    select("Cuff");
+    find<QPushButton>("addOverlayButton")->click();
+    auto *pattern = qobject_cast<QComboBox *>(find<QTableWidget>("overlayTable")->cellWidget(0, 0));
+    pattern->setCurrentIndex(pattern->findData("Stripes 2 rows"));
+
+    QVector<MainWindow::YarnLine> report = window->yarnReport();
+    QStringList slotNames;
+    for (const auto &line : report) slotNames << line.slot;
+    QCOMPARE(slotNames.first(), QString("main"));
+    QVERIFY(slotNames.contains("A") && slotNames.contains("B"));
+    for (const auto &line : report)
+    {
+        QVERIFY(line.stitches > 0);
+        QCOMPARE(line.neededMeters, 0.0);                    // no yarn chosen yet
+    }
+
+    QString error;
+    QVERIFY(!window->setYarn("main", "no-such-id", &error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(window->setYarn("main", small));
+    report = window->yarnReport();
+    QCOMPARE(report.first().yarnName, QString("Woolly Small (red)"));
+    QVERIFY(report.first().neededMeters > 100);              // a whole shirt from 100 m
+    QVERIFY(!report.first().enough);
+    QVERIFY(window->setYarn("main", big));
+    QVERIFY(window->setYarn("A", big));                      // the same yarn in two slots has to last for both
+    report = window->yarnReport();
+    QVERIFY(report.first().enough);
+    QCOMPARE(report.first().stockMeters, 100000.0);
+    QVERIFY(window->isModified());
+    QVERIFY(window->undo().contains("Choose yarn"));         // undo takes "A" back off
+    QVERIFY(window->yarnRefs().contains("main"));
+    QVERIFY(!window->yarnRefs().contains("A"));
+    QVERIFY(window->setYarn("main", QString()));             // no yarn again
+    QVERIFY(window->yarnRefs().isEmpty());
+}
+
+void TstMainWindow::yarnsInProjects()
+{
+    YarnInventory inv;
+    const QString id = inv.set(makeYarn("Big", 100000, false));
+    window->setYarnInventory(inv);
+    QVERIFY(window->setYarn("main", id));
+    QTemporaryDir dir;
+    const QString file = dir.filePath("y.stitchly");
+    QString error;
+    QVERIFY2(window->saveProject(file, &error), qPrintable(error));
+    QVERIFY(window->setYarn("main", QString()));
+    QVERIFY2(window->openProject(file, &error, MainWindow::CatalogConflict::KeepMine), qPrintable(error));
+    QCOMPARE(window->yarnRefs().value("main").id, id);
+    QVERIFY(!window->isModified());
+    // a project from a computer that does not have the yarn: the stored name is shown, nothing is estimated
+    window->setYarnInventory(YarnInventory());
+    QVector<MainWindow::YarnLine> report = window->yarnReport();
+    QCOMPARE(report.first().yarnId, id);
+    QCOMPARE(report.first().yarnName, QString("Woolly Big (red)"));
+    QCOMPARE(report.first().neededMeters, 0.0);
+    // opening another pattern starts a new project without yarns
+    QVERIFY(window->openPattern(QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"), &error));
+    QVERIFY(window->yarnRefs().isEmpty());
+}
+
+void TstMainWindow::yarnGaugeSetsStitchSizes()
+{
+    YarnInventory inv;
+    const QString id = inv.set(makeYarn("Gauged", 100000, true));
+    const QString plain = inv.set(makeYarn("Plain", 100000, false));
+    window->setYarnInventory(inv);
+    QString error;
+    QCOMPARE(window->useYarnGauge(&error), 0);               // no main yarn yet
+    QVERIFY(!error.isEmpty());
+    QVERIFY(window->setYarn("main", plain));
+    QCOMPARE(window->useYarnGauge(&error), 0);               // this yarn has no gauge
+    QVERIFY(window->setYarn("main", id));
+    select("Cuff");
+    const QString before = window->instructionsText();
+    QCOMPARE(window->useYarnGauge(&error), 1);               // "No such stitch" is not in the catalog
+    const StitchType t = window->catalog().basics().find("Stockinette");
+    QVERIFY(qAbs(t.size.stitchWidthMm - 4.0) < 1e-9);
+    QVERIFY(qAbs(t.size.rowHeightMm - 100.0 / 30) < 1e-9);
+    QVERIFY(window->instructionsText() != before);           // 4 mm stitches give more stitches
+    QVERIFY(window->undo().contains("Use gauge"));
+    QCOMPARE(window->instructionsText(), before);
+}
+
+void TstMainWindow::yarnPanel()
+{
+    YarnInventory inv;
+    const QString id = inv.set(makeYarn("Big", 100000, false));
+    window->setYarnInventory(inv);
+    QDockWidget *dock = find<QDockWidget>("yarnsDock");
+    QVERIFY(dock);
+    dock->raise();
+    QTest::qWait(20);
+    auto *combo = find<QComboBox>("yarnCombo_main");
+    QVERIFY(combo);
+    QCOMPARE(combo->count(), 2);                             // no yarn + the one yarn
+    combo->setCurrentIndex(combo->findData(id));
+    QCOMPARE(window->yarnRefs().value("main").id, id);
+    QTest::qWait(20);                                        // the panel is rebuilt
+    auto *info = find<QLabel>("yarnInfo_main");
+    QVERIFY(info);
+    QVERIFY2(info->text().contains("100000 m in stock"), qPrintable(info->text()));
+    QVERIFY(find<QPushButton>("useYarnGaugeButton"));
+    QVERIFY(find<QPushButton>("editYarnsButton"));
+}
+
+void TstMainWindow::yarnInventoryEditor()
+{
+    yarnui::YarnInventoryWidget w(YarnInventory(), {"Stockinette", "Garter"});
+    auto child = [&](const char *name) { return w.findChild<QWidget *>(name); };
+    QVERIFY(!child("yarnName")->isEnabled());                 // nothing selected
+    qobject_cast<QPushButton *>(child("addYarnButton"))->click();
+    QCOMPARE(w.inventory().size(), 1);
+    auto *name = qobject_cast<QLineEdit *>(child("yarnName"));
+    QVERIFY(name->isEnabled());
+    name->setText(QString());
+    QTest::keyClicks(name, "Soft");
+    qobject_cast<QDoubleSpinBox *>(child("yarnMeters"))->setValue(200);
+    qobject_cast<QSpinBox *>(child("yarnSkeins"))->setValue(2);
+    qobject_cast<QDoubleSpinBox *>(child("yarnPartial"))->setValue(40);
+    auto *hex = qobject_cast<QLineEdit *>(child("yarnColorHex"));
+    QTest::keyClicks(hex, "#12");                              // half typed: the yarn keeps its old value
+    QVERIFY(w.inventory().yarns().first().colorHex.isEmpty());
+    QTest::keyClicks(hex, "34ab");
+    qobject_cast<QPushButton *>(child("addGaugeButton"))->click();
+    qobject_cast<QPushButton *>(child("addGaugeButton"))->click();
+    qobject_cast<QPushButton *>(child("addGaugeButton"))->click();   // only two stitches to give a gauge for
+    const Yarn y = w.inventory().yarns().first();
+    QCOMPARE(y.name, QString("Soft"));
+    QCOMPARE(y.stockMeters(), 440.0);
+    QCOMPARE(y.colorHex, QString("#1234ab"));
+    QCOMPARE(y.gauges.size(), 2);
+    QVERIFY(y.gaugeFor("Stockinette") && y.gaugeFor("Garter"));
+    auto *rows = qobject_cast<QDoubleSpinBox *>(qobject_cast<QTableWidget *>(child("yarnGauges"))->cellWidget(0, 2));
+    rows->setValue(40);
+    QVERIFY(qAbs(w.inventory().yarns().first().gauges.first().size.rowsPer10cm() - 40) < 1e-6);
+    qobject_cast<QPushButton *>(child("duplicateYarnButton"))->click();
+    QCOMPARE(w.inventory().size(), 2);
+    QVERIFY(w.inventory().yarns().last().name.contains("copy"));
+    QVERIFY(w.validate());
+    name->setText("x");
+    QTest::keyClick(name, Qt::Key_Backspace);                  // the copy loses its name
+    QString error;
+    QVERIFY(w.inventory().yarns().last().name.isEmpty());
+    QVERIFY(!w.validate(&error));
+    QVERIFY(!error.isEmpty());
 }
 
 int main(int argc, char *argv[])
