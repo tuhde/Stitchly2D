@@ -98,7 +98,11 @@ GuideWindow::GuideWindow(QWidget *parent)
     m_prev = new QPushButton(tr("< Previous"), this);
     m_next = new QPushButton(tr("Next >"), this);
     auto *jump = new QPushButton(tr("Go to row..."), this);
-    for (QPushButton *b : {m_prev, m_next, jump})
+    m_prevBlock = new QPushButton(tr("<< Block"), this);
+    m_nextBlock = new QPushButton(tr("Block >>"), this);
+    m_prevBlock->setObjectName(QStringLiteral("previousBlockButton"));
+    m_nextBlock->setObjectName(QStringLiteral("nextBlockButton"));
+    for (QPushButton *b : {m_prev, m_next, jump, m_prevBlock, m_nextBlock})
     {
         b->setMinimumHeight(u * 5);          // bigger than the default touch target: used all the time
         b->setFocusPolicy(Qt::NoFocus);
@@ -110,9 +114,11 @@ GuideWindow::GuideWindow(QWidget *parent)
     {
         b->setFocusPolicy(Qt::NoFocus);
     }
+    bottom->addWidget(m_prevBlock, 1);
     bottom->addWidget(m_prev, 2);
     bottom->addWidget(jump, 1);
     bottom->addWidget(m_next, 2);
+    bottom->addWidget(m_nextBlock, 1);
     root->addLayout(bottom);
 
     setAttribute(Qt::WA_StyledBackground, true);
@@ -123,6 +129,8 @@ GuideWindow::GuideWindow(QWidget *parent)
     connect(m_yarnButton, &QPushButton::clicked, this, &GuideWindow::chooseYarn);
     connect(m_prev, &QPushButton::clicked, this, &GuideWindow::previousRow);
     connect(m_next, &QPushButton::clicked, this, &GuideWindow::nextRow);
+    connect(m_prevBlock, &QPushButton::clicked, this, &GuideWindow::previousBlock);
+    connect(m_nextBlock, &QPushButton::clicked, this, &GuideWindow::nextBlock);
     connect(jump, &QPushButton::clicked, this, &GuideWindow::jumpToRow);
     connect(m_view, &StepView::tappedAbove, this, &GuideWindow::previousRow);
     connect(m_view, &StepView::tappedBelow, this, &GuideWindow::nextRow);
@@ -315,6 +323,8 @@ void GuideWindow::updateView()
         m_yarnLabel->hide();
         m_prev->setEnabled(false);
         m_next->setEnabled(false);
+        m_prevBlock->setEnabled(false);
+        m_nextBlock->setEnabled(false);
         return;
     }
     const KnitPiece &p = m_job.pieces.at(m_piece);
@@ -335,6 +345,8 @@ void GuideWindow::updateView()
     m_view->setCurrent(stitchcore::stepsForRow(p.steps, m_row));
     m_prev->setEnabled(m_row > 0);
     m_next->setEnabled(m_row <= p.rowCount);
+    m_prevBlock->setEnabled(m_row > 0);
+    m_nextBlock->setEnabled(m_row <= p.rowCount);
     m_yarnButton->setVisible(!m_inventory.yarns().isEmpty());
     updateYarnLabel();
 }

@@ -443,6 +443,14 @@
         <source>The yarn stock could not be saved: %1</source>
         <translation>Der Garnvorrat konnte nicht gespeichert werden: %1</translation>
     </message>
+    <message>
+        <source>&lt;&lt; Block</source>
+        <translation>&lt;&lt; Block</translation>
+    </message>
+    <message>
+        <source>Block &gt;&gt;</source>
+        <translation>Block &gt;&gt;</translation>
+    </message>
 </context>
 <context>
     <name>Instructions</name>

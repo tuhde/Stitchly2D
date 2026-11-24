@@ -128,6 +128,8 @@ private:
     StepView     *m_view = nullptr;
     QPushButton  *m_prev = nullptr;
     QPushButton  *m_next = nullptr;
+    QPushButton  *m_prevBlock = nullptr;
+    QPushButton  *m_nextBlock = nullptr;
     QPushButton  *m_pieceButton = nullptr;
     QPushButton  *m_yarnButton = nullptr;
     QLabel       *m_yarnLabel = nullptr;

@@ -67,6 +67,7 @@ private slots:
     void yarnDeductedWhenFinished();
     void yarnMainFromOption();
     void cursorFollowsTouchScreen();
+    void blockButtons();
     void opensPattern();
     void rowsAreClamped();
     void keysStepThroughRows();
@@ -1176,6 +1177,27 @@ void TstGuider::cursorFollowsTouchScreen()
     GuideWindow w;
     w.updateCursor();
     QCOMPARE(w.cursor().shape() == Qt::BlankCursor, GuideWindow::hasTouchScreen());
+}
+
+void TstGuider::blockButtons()
+{
+    GuideWindow w;
+    QVERIFY(w.openFile(shirt()));
+    w.show();
+    auto *nextBlock = w.findChild<QPushButton *>("nextBlockButton");
+    auto *prevBlock = w.findChild<QPushButton *>("previousBlockButton");
+    QVERIFY(nextBlock && prevBlock);
+    QVERIFY(!prevBlock->isEnabled());                 // at the start
+    nextBlock->click();
+    const int first = w.row();
+    QVERIFY(first > 0);
+    nextBlock->click();
+    QVERIFY(w.row() > first);
+    prevBlock->click();
+    QCOMPARE(w.row(), first);                         // the same as Page Up
+    w.setRow(w.rowCount() + 1);
+    QVERIFY(!nextBlock->isEnabled());                 // after the bind-off
+    QVERIFY(prevBlock->isEnabled());
 }
 
 int main(int argc, char *argv[])
