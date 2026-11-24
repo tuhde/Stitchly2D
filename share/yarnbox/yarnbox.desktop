@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Yarnbox
+Name[de]=Garnkiste
+Comment=Yarn inventory for Stitchly2D
+Comment[de]=Garnbestand für Stitchly2D
+Exec=yarnbox
+Icon=applications-other
+Terminal=false
+Categories=Utility;

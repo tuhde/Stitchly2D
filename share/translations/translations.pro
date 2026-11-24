@@ -26,3 +26,7 @@ HEADERS += \
 # guider (its own program, same translation files)
 SOURCES += $$files($$PWD/../../src/app/guider/*.cpp)
 HEADERS += $$files($$PWD/../../src/app/guider/*.h)
+
+# yarnbox (the yarn inventory on its own, same translation files)
+SOURCES += $$files($$PWD/../../src/app/yarnbox/*.cpp)
+HEADERS += $$files($$PWD/../../src/app/yarnbox/*.h)

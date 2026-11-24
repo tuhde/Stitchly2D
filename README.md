@@ -63,7 +63,7 @@ pattern. Pieces are turned so their grainline is vertical. `--cli` needs no disp
 
 `guider` is a second program for a Raspberry Pi with a touch screen at the knitting machine. It opens a `.stitchly` or `.sm2d` file, shows the instructions as large rolling text, and follows a row counter (touch buttons, a GPIO sensor or a simulated one). Run `guider pattern.stitchly` (`--windowed` for a window, `--lang de_DE` for German, `--help` for all options). Keys: arrows/Space/Backspace row by row, Page Up/Down by block, Home/End first row and bind-off, O open, P piece, G go to row, S settings, Y yarn. Setup on the Pi (build, GPIO, autostart): [docs/GUIDER_PI.md](docs/GUIDER_PI.md); design: [docs/GUIDE_PLAN.md](docs/GUIDE_PLAN.md).
 
-Yarns: the guider reads the yarn inventory (`yarns.json` in the same config folder as the catalog, edited in the editor under Yarns). When a project does not name the yarn of a piece, the guider asks for it as the piece is opened (a Garn/Yarn button and the Y key ask again, `--yarn name` settles the main yarn), shows the yarn of the row in the top bar, and when the bind-off is reached offers to take the estimated yarn from the stock. See [docs/YARN_PLAN.md](docs/YARN_PLAN.md).
+Yarns: the guider reads the yarn inventory (`yarns.json` in the same config folder as the catalog, edited in the editor under Yarns). When a project does not name the yarn of a piece, the guider asks for it as the piece is opened (a Garn/Yarn button and the Y key ask again, `--yarn name` settles the main yarn), shows the yarn of the row in the top bar, and when the bind-off is reached offers to take the estimated yarn from the stock. `yarnbox` is the yarn inventory as a small program of its own (no pattern loader, starts fast; `--lang`, optional file argument, desktop entry in `share/yarnbox`). It asks before overwriting a yarn file that changed meanwhile, for example by the guider taking used yarn from the stock. See [docs/YARN_PLAN.md](docs/YARN_PLAN.md).
 
 ## Languages
 
@@ -88,8 +88,10 @@ The names of the catalog's stitches and patterns, the CSV header and the tool de
 |---|---|
 | `src/libs/` | Shared libraries copied from Seamly2D (`ifc`, `vpatterndb`, `vgeometry`, `vlayout`, `vmisc`, `vwidgets`, `vformat`, `vtools`, `qmuparser`, `vmcp`, ...). Kept unmodified where possible so changes can be compared with upstream. |
 | `src/libs/stitchcore/` | Knitting logic without any GUI: stitch size, stitch grid, shaping, yarn inventory and yarn estimate. |
-| `src/libs/yarnui/` | Widgets of the yarn inventory (editor and yarn list), shared by the editor and the yarn program (planned). |
+| `src/libs/yarnui/` | Widgets of the yarn inventory, shared by the editor and `yarnbox`. |
 | `src/app/stitchly2d/` | The program: main window, pattern loader (running Seamly2D's parser without a window) and the `--cli` mode. The main window. |
+| `src/app/guider/` | The knitting guide for the touch screen. |
+| `src/app/yarnbox/` | The yarn inventory as a program of its own. |
 | `docs/PLAN.md` | Design and roadmap. |
 | `NOTICE` | Which Seamly2D commit the libraries come from. |
 

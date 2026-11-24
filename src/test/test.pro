@@ -1,5 +1,6 @@
 TEMPLATE = subdirs
-SUBDIRS = tst_stitchcore tst_mainwindow tst_guider
+SUBDIRS = tst_stitchcore tst_mainwindow tst_guider tst_yarnbox
 tst_stitchcore.file = stitchcore/tst_stitchcore.pro
 tst_mainwindow.file = mainwindow/tst_mainwindow.pro
 tst_guider.file = guider/tst_guider.pro
+tst_yarnbox.file = yarnbox/tst_yarnbox.pro

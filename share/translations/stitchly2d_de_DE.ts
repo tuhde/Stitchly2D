@@ -2405,6 +2405,61 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     </message>
 </context>
 <context>
+    <name>YarnboxWindow</name>
+    <message>
+        <source>&amp;File</source>
+        <translation>&amp;Datei</translation>
+    </message>
+    <message>
+        <source>&amp;Save</source>
+        <translation>&amp;Speichern</translation>
+    </message>
+    <message>
+        <source>&amp;Reload</source>
+        <translation>&amp;Neu laden</translation>
+    </message>
+    <message>
+        <source>&amp;Quit</source>
+        <translation>&amp;Beenden</translation>
+    </message>
+    <message>
+        <source>Yarnbox - %1[*]</source>
+        <translation>Garnkiste - %1[*]</translation>
+    </message>
+    <message>
+        <source>%1 could not be read: %2</source>
+        <translation>%1 konnte nicht gelesen werden: %2</translation>
+    </message>
+    <message>
+        <source>%1 yarns in %2</source>
+        <translation>%1 Garne in %2</translation>
+    </message>
+    <message>
+        <source>The file could not be read, so it is not overwritten. Fix or remove it, then choose Reload.</source>
+        <translation>Die Datei konnte nicht gelesen werden und wird deshalb nicht überschrieben. Repariere oder entferne sie und wähle dann „Neu laden“.</translation>
+    </message>
+    <message>
+        <source>%1 was changed after it was read (the guider may have taken used yarn from the stock). Overwrite it with what you see here? Choose No, then Reload to see the new stock.</source>
+        <translation>%1 wurde nach dem Einlesen geändert (vielleicht hat der Strickführer verbrauchtes Garn vom Vorrat abgezogen). Mit dem überschreiben, was du hier siehst? Wähle „Nein“ und dann „Neu laden“, um den neuen Vorrat zu sehen.</translation>
+    </message>
+    <message>
+        <source>Yarnbox</source>
+        <translation>Garnkiste</translation>
+    </message>
+    <message>
+        <source>Not saved: the file changed.</source>
+        <translation>Nicht gespeichert: Die Datei wurde geändert.</translation>
+    </message>
+    <message>
+        <source>Saved to %1</source>
+        <translation>In %1 gespeichert</translation>
+    </message>
+    <message>
+        <source>The yarns have unsaved changes.</source>
+        <translation>Die Garne haben ungespeicherte Änderungen.</translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
         <source>Prepares Seamly2D patterns for knitting.</source>
@@ -2541,6 +2596,14 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>Knit the main yarn with this yarn of the inventory (name or part of it).</source>
         <translation>Das Hauptgarn mit diesem Garn aus dem Bestand stricken (Name oder Teil davon).</translation>
+    </message>
+    <message>
+        <source>Edits the yarn inventory of Stitchly2D.</source>
+        <translation>Bearbeitet den Garnbestand von Stitchly2D.</translation>
+    </message>
+    <message>
+        <source>Yarn file; default: the one the editor and the guider use.</source>
+        <translation>Garndatei; Standard: die, die der Editor und der Strickführer verwenden.</translation>
     </message>
 </context>
 <context>

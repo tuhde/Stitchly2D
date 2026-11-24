@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
+#include <QStandardPaths>
 
 namespace stitchcore
 {
@@ -353,6 +354,11 @@ bool StitchCatalog::load(const QString &path, StitchCatalog &out)
         return false;
     }
     return fromJson(doc.object(), out);
+}
+
+QString catalogFilePath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QStringLiteral("/catalog.json");
 }
 
 }

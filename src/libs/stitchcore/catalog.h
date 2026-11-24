@@ -105,6 +105,9 @@ private:
     QVector<PatternDef> m_patterns;
 };
 
+/** Where the user's catalog (catalog.json) is kept: AppConfigLocation + "/catalog.json". */
+QString catalogFilePath();
+
 }
 
 #endif

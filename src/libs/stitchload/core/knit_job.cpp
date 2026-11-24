@@ -15,7 +15,7 @@ using namespace stitchcore;
 
 QString userCatalogPath()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QStringLiteral("/catalog.json");
+    return stitchcore::catalogFilePath();
 }
 
 bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
