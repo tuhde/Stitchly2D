@@ -5,6 +5,7 @@ SOURCES += \
     $$PWD/guide_window.cpp \
     $$PWD/step_view.cpp \
     $$PWD/open_dialog.cpp \
+    $$PWD/yarn_dialog.cpp \
     $$PWD/guide_scale.cpp \
     $$PWD/guide_theme.cpp \
     $$PWD/settings_dialog.cpp \
@@ -16,6 +17,7 @@ HEADERS += \
     $$PWD/guide_window.h \
     $$PWD/step_view.h \
     $$PWD/open_dialog.h \
+    $$PWD/yarn_dialog.h \
     $$PWD/guide_scale.h \
     $$PWD/guide_theme.h \
     $$PWD/settings_dialog.h \

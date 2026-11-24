@@ -2,11 +2,17 @@
 #ifndef GUIDE_WINDOW_H
 #define GUIDE_WINDOW_H
 
+#include <functional>
+
+#include <QHash>
+#include <QMap>
+#include <QSet>
 #include <QWidget>
 
 #include "row_counter.h"
 
 #include "../../libs/stitchload/core/knit_job.h"
+#include "../../libs/stitchcore/yarn.h"
 
 class QLabel;
 class QScreen;
@@ -53,6 +59,28 @@ public:
     bool applyCounterConfig(const RowCounterConfig &config, bool save, QString *error = nullptr);
     const RowCounterConfig &counterConfig() const { return m_counterConfig; }
 
+    // ---- Yarns
+    /** Reads the yarn inventory; a missing file is no yarns. The file is also where used yarn is deducted. Never overwrites an unreadable file. */
+    bool loadYarns(const QString &path, QString *error = nullptr);
+    /** Use this inventory (and do not save it anywhere). */
+    void setYarnInventory(const stitchcore::YarnInventory &inventory);
+    const stitchcore::YarnInventory &yarnInventory() const { return m_inventory; }
+    /** With false the yarn of a piece is never asked for (screenshots). */
+    void setAskForYarn(bool ask) { m_askForYarn = ask; }
+    /** Knit the main yarn of every piece with this yarn (id or name) unless the project names one. False if there is no such yarn. */
+    bool setMainYarn(const QString &idOrName, QString *error = nullptr);
+    /** Yarn slots a piece has stitches in: "main" first, then the colors of its color patterns. */
+    QStringList yarnSlots(int piece) const;
+    /** Yarn id by slot for a piece: what was chosen, else what the project names. Slots without a yarn are left out. */
+    QMap<QString, QString> yarnsOfPiece(int piece) const;
+    /** Meters (with margin) each slot of a piece needs with its yarn. */
+    QMap<QString, qreal> yarnNeeded(int piece) const;
+    /** Asks for the yarn of the current piece if the project does not name it, there are yarns, and it was not asked yet. */
+    bool askYarnIfNeeded();
+    /** Question "take used yarn from the stock?"; returns true for yes. Replaced by the tests. */
+    using DeductPrompt = std::function<bool(const QString &text)>;
+    void setDeductPrompt(const DeductPrompt &prompt) { m_deductPrompt = prompt; }
+
 public slots:
     void setPiece(int piece);
     void setRow(int row);                 //!< clamped to 0 .. rowCount + 1; starts at the first pass of the row
@@ -64,6 +92,7 @@ public slots:
     void choosePiece();
     void jumpToRow();
     void openSettings();
+    void chooseYarn();                    //!< choose the yarns of this piece again
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -75,6 +104,11 @@ private:
     void stepPasses(int delta);          //!< from the row counter: a pass of the machine, or several
     void saveState() const;
     QString rowText() const;
+    QString yarnKey(int piece) const;
+    QStringList unresolvedYarnSlots(int piece) const;
+    bool runYarnDialog(const QStringList &slotNames);
+    void updateYarnLabel();
+    void offerYarnDeduction();
 
     KnitJob       m_job;
     int           m_piece = 0;
@@ -90,6 +124,15 @@ private:
     QPushButton  *m_prev = nullptr;
     QPushButton  *m_next = nullptr;
     QPushButton  *m_pieceButton = nullptr;
+    QPushButton  *m_yarnButton = nullptr;
+    QLabel       *m_yarnLabel = nullptr;
+    stitchcore::YarnInventory m_inventory;
+    QString       m_yarnPath;
+    bool          m_askForYarn = true;
+    QString       m_presetMain;                                   //!< yarn id for the main slot from --yarn
+    QHash<int, QMap<QString, QString>> m_yarnChoice;              //!< by piece: yarn id by slot
+    QSet<int>     m_yarnAsked;
+    DeductPrompt  m_deductPrompt;
 };
 
 #endif

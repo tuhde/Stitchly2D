@@ -411,6 +411,38 @@
         <source>counter stopped</source>
         <translation>Zähler gestoppt</translation>
     </message>
+    <message>
+        <source>Yarn</source>
+        <translation>Garn</translation>
+    </message>
+    <message>
+        <source>There is no yarn &quot;%1&quot; in the inventory.</source>
+        <translation>Im Bestand gibt es kein Garn „%1“.</translation>
+    </message>
+    <message>
+        <source>More than one yarn matches &quot;%1&quot;.</source>
+        <translation>Mehr als ein Garn passt zu „%1“.</translation>
+    </message>
+    <message>
+        <source> (lot %1)</source>
+        <translation> (Partie %1)</translation>
+    </message>
+    <message>
+        <source>%1: about %2 m</source>
+        <translation>%1: etwa %2 m</translation>
+    </message>
+    <message>
+        <source>%1 is finished. Take the yarn from the stock?
+
+%2</source>
+        <translation>%1 ist fertig. Das Garn vom Vorrat abziehen?
+
+%2</translation>
+    </message>
+    <message>
+        <source>The yarn stock could not be saved: %1</source>
+        <translation>Der Garnvorrat konnte nicht gespeichert werden: %1</translation>
+    </message>
 </context>
 <context>
     <name>Instructions</name>
@@ -2324,6 +2356,55 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     </message>
 </context>
 <context>
+    <name>YarnDialog</name>
+    <message>
+        <source>Yarn</source>
+        <translation>Garn</translation>
+    </message>
+    <message>
+        <source>Which yarn do you knit %1 with?</source>
+        <translation>Mit welchem Garn strickst du %1?</translation>
+    </message>
+    <message>
+        <source>Main yarn</source>
+        <translation>Hauptgarn</translation>
+    </message>
+    <message>
+        <source>Yarn %1</source>
+        <translation>Garn %1</translation>
+    </message>
+    <message>
+        <source>(no yarn)</source>
+        <translation>(kein Garn)</translation>
+    </message>
+    <message>
+        <source>  ·  lot %1</source>
+        <translation>  ·  Partie %1</translation>
+    </message>
+    <message>
+        <source>
+%1 m in stock</source>
+        <translation>
+%1 m vorrätig</translation>
+    </message>
+    <message>
+        <source>, about %1 m needed</source>
+        <translation>, etwa %1 m nötig</translation>
+    </message>
+    <message>
+        <source> (not enough)</source>
+        <translation> (reicht nicht)</translation>
+    </message>
+    <message>
+        <source>Without yarn</source>
+        <translation>Ohne Garn</translation>
+    </message>
+    <message>
+        <source>Start</source>
+        <translation>Start</translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
         <source>Prepares Seamly2D patterns for knitting.</source>
@@ -2456,6 +2537,10 @@ Das aktuelle Projekt hat nicht gespeicherte Änderungen, die verloren gehen.</tr
     <message>
         <source>Simulated counter: one pulse every this many ms (default 1000, 0 = never).</source>
         <translation>Simulierter Zähler: ein Impuls alle so viele ms (Standard 1000, 0 = nie).</translation>
+    </message>
+    <message>
+        <source>Knit the main yarn with this yarn of the inventory (name or part of it).</source>
+        <translation>Das Hauptgarn mit diesem Garn aus dem Bestand stricken (Name oder Teil davon).</translation>
     </message>
 </context>
 <context>

@@ -37,6 +37,7 @@ bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
     QMap<QString, KnitMethod> methods;
     QString patternFile = input;
     QString measurements;
+    QMap<QString, YarnRef> yarns;
     if (input.endsWith(QStringLiteral(".stitchly"), Qt::CaseInsensitive))
     {
         Project project;
@@ -52,6 +53,7 @@ bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
         methods = project.methods;
         patternFile = project.patternFile;
         measurements = project.measurementsFile;
+        yarns = project.yarns;
     }
     if (!settings.size.isValid())
     {
@@ -69,6 +71,7 @@ bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
     job = KnitJob();
     job.input = input;
     job.patternFile = patternFile;
+    job.yarns = yarns;
     for (const LoadedPiece &piece : pattern.pieces)
     {
         const QPolygonF &source = (settings.includeSeamAllowance && !piece.cutLine.isEmpty()) ? piece.cutLine
@@ -91,6 +94,7 @@ bool buildKnitJob(const QString &input, KnitJob &job, QString *error)
         out.castOn = grid.castOn();
         out.bindOff = grid.bindOff();
         out.steps = writeInstructionSteps(grid, shaping);
+        out.yarnUses = yarnUses(grid, settings.stitchType);
         out.rowPasses.resize(grid.rowCount() + 2);                    // cast on and bind off are one pass each
         for (int row = 1; row <= grid.rowCount(); ++row)
         {

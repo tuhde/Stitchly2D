@@ -23,7 +23,7 @@ include(../../app/stitchly2d/warnings.pri)
 
 DEFINES += TEST_DATA_DIR=\\\"$$PWD/../data\\\"
 
-LIBNAMES = vmcp tools vtools vwidgets vformat vpatterndb fervor ifc vmisc vgeometry vlayout qmuparser vpropertyexplorer vobj vdxf stitchload stitchcore
+LIBNAMES = vmcp tools vtools vwidgets vformat vpatterndb fervor ifc vmisc vgeometry vlayout qmuparser vpropertyexplorer vobj vdxf stitchload stitchcore yarnui
 unix: LIBS += -Wl,--start-group
 for(lib, LIBNAMES) {
     LIBS += -L$$OUT_PWD/../../libs/$${lib}/bin/ -l$${lib}

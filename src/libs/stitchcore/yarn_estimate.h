@@ -25,6 +25,21 @@ QMap<QString, int> stitchesPerSlot(const StitchGrid &grid);
 /** Yarn length of a number of stitches of a basic stitch, margin not included. */
 qreal yarnForStitches(const Yarn &yarn, const QString &stitchType, const StitchSize &size, int stitches);
 
+/** Stitches of one yarn slot knitted in one basic stitch and size: all that the estimate needs of a grid. */
+struct YarnUse
+{
+    QString    slot;
+    QString    stitchType;     //!< basic stitch; the "Default stitch" is resolved to the stitch of the settings (may be empty)
+    StitchSize size;
+    int        stitches = 0;
+};
+
+/** The stitches of a grid by slot, basic stitch and size. */
+QVector<YarnUse> yarnUses(const StitchGrid &grid, const QString &defaultStitchType = QString());
+
+/** Meters (with margin) every slot with a yarn needs for these stitches. */
+QMap<QString, qreal> estimateYarnMeters(const QVector<YarnUse> &uses, const QMap<QString, Yarn> &yarnBySlot);
+
 /**
  * Meters (with margin) every slot needs. Slots without a yarn in the map are left out.
  * Uses the gauge the yarn has for the band's basic stitch. A band that uses the "Default stitch" counts as

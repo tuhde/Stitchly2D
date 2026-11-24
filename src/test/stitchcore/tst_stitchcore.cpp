@@ -1563,6 +1563,16 @@ void TstStitchCore::yarnEstimate()
     const StitchGrid flat = StitchGrid::build(rect(100, 70), {plain}, cat);
     QCOMPARE(stitchesPerSlot(flat).value(kMainYarnSlot), 400);
 
+    // the stored form of the uses gives the same meters as the grid
+    const QVector<YarnUse> uses = yarnUses(grid);
+    int total = 0;
+    for (const YarnUse &u : uses) total += u.stitches;
+    QCOMPARE(total, 400);
+    QCOMPARE(uses.size(), 2);                                                  // A and B, all Stockinette 5 mm
+    const QMap<QString, qreal> again = estimateYarnMeters(uses, {{"A", a}, {"B", b}});
+    QVERIFY(qAbs(again.value("A") - estimateYarnMeters(grid, {{"A", a}}).value("A")) < 1e-9);
+    QVERIFY(qAbs(again.value("B") - 200 * 30.0 / 1000 * 1.1) < 1e-9);
+
     StitchSize size;
     QVERIFY(suggestStitchSize(a, "Stockinette", size));
     QVERIFY(qAbs(size.stitchesPer10cm() - 22) < 1e-9);

@@ -12,6 +12,7 @@
 #include "guide_theme.h"
 #include "guide_window.h"
 #include "open_dialog.h"
+#include "../../libs/stitchcore/yarn.h"
 #include "row_counter.h"
 
 int main(int argc, char *argv[])
@@ -44,6 +45,8 @@ int main(int argc, char *argv[])
         QStringLiteral("kind"));
     QCommandLineOption langOption(QStringLiteral("lang"),
         QCoreApplication::translate("main", "Language for this run, for example de_DE (default: the system language)."), QStringLiteral("locale"));
+    QCommandLineOption yarnOption(QStringLiteral("yarn"),
+        QCoreApplication::translate("main", "Knit the main yarn with this yarn of the inventory (name or part of it)."), QStringLiteral("name"));
     QCommandLineOption chipOption(QStringLiteral("gpio-chip"), QCoreApplication::translate("main", "GPIO chip (default gpiochip0)."),
                                   QStringLiteral("chip"));
     QCommandLineOption lineOption(QStringLiteral("gpio-line"), QCoreApplication::translate("main", "GPIO line (BCM pin number) of the sensor."),
@@ -59,7 +62,7 @@ int main(int argc, char *argv[])
         QStringLiteral("n"));
     QCommandLineOption simOption(QStringLiteral("sim-period"),
         QCoreApplication::translate("main", "Simulated counter: one pulse every this many ms (default 1000, 0 = never)."), QStringLiteral("ms"));
-    parser.addOptions({langOption, windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
+    parser.addOptions({langOption, yarnOption, windowed, piece, rowOption, shot, size, counterOption, chipOption, lineOption, edgeOption, pullOption,
                        debounceOption, pulsesOption, simOption});
     parser.process(app);
     if (parser.isSet(langOption)) app.loadTranslations(parser.value(langOption));
@@ -98,6 +101,17 @@ int main(int argc, char *argv[])
     startFollowingSystemTheme();
     applyGuideStyle(app);
     GuideWindow window;
+    QString yarnError;
+    if (!window.loadYarns(stitchcore::userYarnPath(), &yarnError))
+    {
+        QTextStream(stderr) << yarnError << "\n";        // the window works without yarns
+    }
+    if (parser.isSet(yarnOption) && !window.setMainYarn(parser.value(yarnOption), &yarnError))
+    {
+        QTextStream(stderr) << yarnError << "\n";
+        return 2;
+    }
+    window.setAskForYarn(!parser.isSet(shot) && !parser.isSet(piece));    // with --piece: asked once the piece is set
 
     QString path = parser.positionalArguments().value(0);
     if (path.isEmpty())
@@ -131,6 +145,8 @@ int main(int argc, char *argv[])
             {
                 if (window.job().pieces.at(i).name == parser.value(piece)) window.setPiece(i);
             }
+            window.setAskForYarn(!parser.isSet(shot));
+            window.askYarnIfNeeded();
         }
     }
     if (!path.isEmpty() && parser.isSet(rowOption))

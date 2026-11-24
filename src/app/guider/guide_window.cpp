@@ -10,6 +10,7 @@
 #include <QScreen>
 #include <QWindow>
 #include <QDialog>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
 #include <QVBoxLayout>
@@ -20,6 +21,8 @@
 #include "open_dialog.h"
 #include "row_counter.h"
 #include "step_view.h"
+#include "yarn_dialog.h"
+#include "../../libs/stitchcore/yarn_estimate.h"
 
 namespace
 {
@@ -50,6 +53,9 @@ GuideWindow::GuideWindow(QWidget *parent)
     auto *openButton = new QPushButton(tr("Open"), this);
     m_pieceButton = new QPushButton(tr("Piece"), this);
     auto *settingsButton = new QPushButton(tr("Settings"), this);
+    m_yarnButton = new QPushButton(tr("Yarn"), this);
+    m_yarnButton->setObjectName(QStringLiteral("yarnButton"));
+    m_yarnButton->hide();
     m_title = new QLabel(this);
     m_rowLabel = new QLabel(this);
     QFont big = font();
@@ -60,6 +66,7 @@ GuideWindow::GuideWindow(QWidget *parent)
     m_rowLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     top->addWidget(openButton);
     top->addWidget(m_pieceButton);
+    top->addWidget(m_yarnButton);
     top->addWidget(settingsButton);
     top->addSpacing(u);
     m_counterLabel = new QLabel(this);
@@ -73,6 +80,14 @@ GuideWindow::GuideWindow(QWidget *parent)
     top->addSpacing(u);
     top->addWidget(m_rowLabel);
     root->addLayout(top);
+    m_yarnLabel = new QLabel(this);
+    m_yarnLabel->setObjectName(QStringLiteral("yarnLabel"));
+    m_yarnLabel->setTextFormat(Qt::RichText);
+    m_yarnLabel->hide();
+    QFont yarnFont = font();
+    yarnFont.setPixelSize(u * 3 / 2);
+    m_yarnLabel->setFont(yarnFont);
+    root->addWidget(m_yarnLabel);
 
     m_view = new StepView(this);
     root->addWidget(m_view, 1);
@@ -89,7 +104,7 @@ GuideWindow::GuideWindow(QWidget *parent)
         f.setPixelSize(u * 3 / 2 + u / 2);
         b->setFont(f);
     }
-    for (QPushButton *b : {openButton, m_pieceButton, settingsButton})
+    for (QPushButton *b : {openButton, m_pieceButton, m_yarnButton, settingsButton})
     {
         b->setFocusPolicy(Qt::NoFocus);
     }
@@ -103,6 +118,7 @@ GuideWindow::GuideWindow(QWidget *parent)
     connect(openButton, &QPushButton::clicked, this, &GuideWindow::chooseFile);
     connect(m_pieceButton, &QPushButton::clicked, this, &GuideWindow::choosePiece);
     connect(settingsButton, &QPushButton::clicked, this, &GuideWindow::openSettings);
+    connect(m_yarnButton, &QPushButton::clicked, this, &GuideWindow::chooseYarn);
     connect(m_prev, &QPushButton::clicked, this, &GuideWindow::previousRow);
     connect(m_next, &QPushButton::clicked, this, &GuideWindow::nextRow);
     connect(jump, &QPushButton::clicked, this, &GuideWindow::jumpToRow);
@@ -138,6 +154,8 @@ bool GuideWindow::openFile(const QString &file, QString *error)
         return false;
     }
     m_job = job;
+    m_yarnChoice.clear();
+    m_yarnAsked.clear();
     QStringList recent = recentFiles();
     recent.removeAll(path);
     recent.prepend(path);
@@ -177,6 +195,10 @@ void GuideWindow::setPiece(int piece)
     m_row = qBound(0, settings().value(rowKey(m_job.input, p.name), 0).toInt(), p.rowCount + 1);
     saveState();
     updateView();
+    if (m_askForYarn)
+    {
+        askYarnIfNeeded();
+    }
 }
 
 int GuideWindow::passesInRow(int row) const
@@ -210,6 +232,7 @@ void GuideWindow::stepPasses(int delta)
     }
     saveState();
     updateView();
+    offerYarnDeduction();
 }
 
 void GuideWindow::setRow(int row)
@@ -230,8 +253,13 @@ void GuideWindow::setRow(int row)
         return;
     }
     m_row = row;
+    if (row == 0)
+    {
+        settings().remove(QStringLiteral("yarnUsed/") + yarnKey(m_piece));       // knitted again: the yarn can be taken off again
+    }
     saveState();
     updateView();
+    offerYarnDeduction();
 }
 
 void GuideWindow::nextBlock()
@@ -282,6 +310,7 @@ void GuideWindow::updateView()
         m_title->setText(tr("No pattern open"));
         m_rowLabel->clear();
         m_view->setSteps({});
+        m_yarnLabel->hide();
         m_prev->setEnabled(false);
         m_next->setEnabled(false);
         return;
@@ -304,6 +333,8 @@ void GuideWindow::updateView()
     m_view->setCurrent(stitchcore::stepsForRow(p.steps, m_row));
     m_prev->setEnabled(m_row > 0);
     m_next->setEnabled(m_row <= p.rowCount);
+    m_yarnButton->setVisible(!m_inventory.yarns().isEmpty());
+    updateYarnLabel();
 }
 
 void GuideWindow::chooseFile()
@@ -394,6 +425,9 @@ void GuideWindow::keyPressEvent(QKeyEvent *event)
             break;
         case Qt::Key_S:
             openSettings();
+            break;
+        case Qt::Key_Y:
+            if (!m_inventory.yarns().isEmpty()) chooseYarn();
             break;
         case Qt::Key_F11:
             isFullScreen() ? showNormal() : showFullScreen();
@@ -515,4 +549,283 @@ void GuideWindow::openSettings()
     {
         m_counter->start();
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Yarns
+
+using namespace stitchcore;
+
+bool GuideWindow::loadYarns(const QString &path, QString *error)
+{
+    YarnInventory inventory;
+    if (!YarnInventory::load(path, inventory, error))
+    {
+        m_inventory = YarnInventory();
+        m_yarnPath.clear();                  // an unreadable file is left alone
+        updateView();
+        return false;
+    }
+    m_inventory = inventory;
+    m_yarnPath = path;
+    updateView();
+    return true;
+}
+
+void GuideWindow::setYarnInventory(const YarnInventory &inventory)
+{
+    m_inventory = inventory;
+    m_yarnPath.clear();
+    updateView();
+}
+
+bool GuideWindow::setMainYarn(const QString &idOrName, QString *error)
+{
+    QString found;
+    int matches = 0;
+    for (const Yarn &y : m_inventory.yarns())
+    {
+        if (y.id == idOrName) { found = y.id; matches = 1; break; }
+        if (y.displayName().contains(idOrName, Qt::CaseInsensitive)) { found = y.id; ++matches; }
+    }
+    if (matches != 1)
+    {
+        if (error) *error = matches == 0 ? tr("There is no yarn \"%1\" in the inventory.").arg(idOrName)
+                                         : tr("More than one yarn matches \"%1\".").arg(idOrName);
+        return false;
+    }
+    m_presetMain = found;
+    updateView();
+    return true;
+}
+
+QString GuideWindow::yarnKey(int piece) const
+{
+    const QString name = piece >= 0 && piece < m_job.pieces.size() ? m_job.pieces.at(piece).name : QString();
+    return QString::fromUtf8((m_job.input + QLatin1Char('|') + name).toUtf8().toBase64(QByteArray::Base64UrlEncoding));
+}
+
+QStringList GuideWindow::yarnSlots(int piece) const
+{
+    QStringList slotNames;
+    if (piece < 0 || piece >= m_job.pieces.size())
+    {
+        return slotNames;
+    }
+    QStringList colors;
+    bool main = false;
+    for (const YarnUse &u : m_job.pieces.at(piece).yarnUses)
+    {
+        if (u.stitches <= 0) continue;
+        if (u.slot == QLatin1String(kMainYarnSlot)) main = true;
+        else if (!colors.contains(u.slot)) colors << u.slot;
+    }
+    colors.sort();
+    if (main) slotNames << QString::fromLatin1(kMainYarnSlot);
+    return slotNames + colors;
+}
+
+QMap<QString, QString> GuideWindow::yarnsOfPiece(int piece) const
+{
+    QMap<QString, QString> ids;
+    const QMap<QString, QString> chosen = m_yarnChoice.value(piece);
+    for (const QString &slot : yarnSlots(piece))
+    {
+        QString id = chosen.value(slot);
+        if (id.isEmpty()) id = m_job.yarns.value(slot).id;
+        if (id.isEmpty() && slot == QLatin1String(kMainYarnSlot)) id = m_presetMain;
+        if (!id.isEmpty()) ids.insert(slot, id);
+    }
+    return ids;
+}
+
+QMap<QString, qreal> GuideWindow::yarnNeeded(int piece) const
+{
+    QMap<QString, Yarn> bySlot;
+    const QMap<QString, QString> ids = yarnsOfPiece(piece);
+    for (auto it = ids.cbegin(); it != ids.cend(); ++it)
+    {
+        if (const Yarn *y = m_inventory.find(it.value())) bySlot.insert(it.key(), *y);
+    }
+    return piece >= 0 && piece < m_job.pieces.size() ? estimateYarnMeters(m_job.pieces.at(piece).yarnUses, bySlot)
+                                                      : QMap<QString, qreal>();
+}
+
+QStringList GuideWindow::unresolvedYarnSlots(int piece) const
+{
+    QStringList open;
+    const QMap<QString, QString> ids = yarnsOfPiece(piece);
+    for (const QString &slot : yarnSlots(piece))
+    {
+        if (!ids.contains(slot)) open << slot;
+    }
+    return open;
+}
+
+bool GuideWindow::runYarnDialog(const QStringList &slotNames)
+{
+    if (slotNames.isEmpty() || m_piece < 0 || m_piece >= m_job.pieces.size())
+    {
+        return false;
+    }
+    const KnitPiece &p = m_job.pieces.at(m_piece);
+    QMap<QString, QString> before = yarnsOfPiece(m_piece);
+    for (const QString &slot : slotNames)
+    {
+        if (!before.contains(slot))
+        {
+            const QString remembered = settings().value(QStringLiteral("yarn/") + yarnKey(m_piece) + QLatin1Char('/') + slot).toString();
+            if (m_inventory.find(remembered)) before.insert(slot, remembered);
+        }
+    }
+    YarnDialog dialog(p.name, slotNames, m_inventory, p.yarnUses, before, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return false;
+    }
+    const QMap<QString, QString> chosen = dialog.choice();
+    QMap<QString, QString> &mine = m_yarnChoice[m_piece];
+    for (const QString &slot : slotNames)
+    {
+        const QString key = QStringLiteral("yarn/") + yarnKey(m_piece) + QLatin1Char('/') + slot;
+        if (chosen.contains(slot))
+        {
+            mine.insert(slot, chosen.value(slot));
+            settings().setValue(key, chosen.value(slot));
+        }
+        else
+        {
+            mine.remove(slot);
+            settings().remove(key);
+        }
+    }
+    updateView();
+    return true;
+}
+
+bool GuideWindow::askYarnIfNeeded()
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size() || m_inventory.yarns().isEmpty() || m_yarnAsked.contains(m_piece))
+    {
+        return false;
+    }
+    const QStringList open = unresolvedYarnSlots(m_piece);
+    if (open.isEmpty())
+    {
+        return false;
+    }
+    m_yarnAsked.insert(m_piece);
+    return runYarnDialog(open);
+}
+
+void GuideWindow::chooseYarn()
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size() || m_inventory.yarns().isEmpty())
+    {
+        return;
+    }
+    m_yarnAsked.insert(m_piece);
+    runYarnDialog(yarnSlots(m_piece));
+}
+
+void GuideWindow::updateYarnLabel()
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size())
+    {
+        m_yarnLabel->hide();
+        return;
+    }
+    const KnitPiece &p = m_job.pieces.at(m_piece);
+    const RowPasses passes = m_row < p.rowPasses.size() ? p.rowPasses.at(m_row) : RowPasses();
+    const QString mainSlot = QString::fromLatin1(kMainYarnSlot);
+    const QStringList rowSlots = passes.yarns.isEmpty() ? QStringList{mainSlot} : passes.yarns;
+    const QString currentSlot = passes.count() > 1 ? passes.passes.at(qMin(m_pass, passes.count() - 1)).yarn : QString();
+    const QMap<QString, QString> ids = yarnsOfPiece(m_piece);
+    QStringList parts;
+    for (const QString &slot : rowSlots)
+    {
+        const QString id = ids.value(slot);
+        QString text;
+        QString color;
+        if (id.isEmpty())
+        {
+            if (slot == mainSlot) continue;
+            text = slot.toHtmlEscaped();                 // a color without a yarn
+        }
+        else
+        {
+            QString name = m_job.yarns.value(slot).id == id ? m_job.yarns.value(slot).name : QString();
+            if (const Yarn *y = m_inventory.find(id))
+            {
+                name = y->displayName();
+                if (!y->dyeLot.isEmpty()) name += tr(" (lot %1)").arg(y->dyeLot);
+                color = y->colorHex;
+            }
+            else
+            {
+                color = m_job.yarns.value(slot).colorHex;
+            }
+            text = (slot == mainSlot ? QString() : slot.toHtmlEscaped() + QStringLiteral(": ")) + name.toHtmlEscaped();
+        }
+        if (!color.isEmpty())
+        {
+            text = QStringLiteral("<span style=\"color:%1\">&#9679;</span> ").arg(color) + text;
+        }
+        if (!currentSlot.isEmpty() && slot == currentSlot) text = QStringLiteral("<b><u>%1</u></b>").arg(text);
+        parts << text;
+    }
+    m_yarnLabel->setText(parts.join(QStringLiteral("&nbsp;&nbsp;&nbsp;&nbsp;")));
+    m_yarnLabel->setVisible(!parts.isEmpty());
+}
+
+void GuideWindow::offerYarnDeduction()
+{
+    if (m_piece < 0 || m_piece >= m_job.pieces.size() || rowCount() == 0 || m_row <= rowCount())
+    {
+        return;
+    }
+    const QString key = QStringLiteral("yarnUsed/") + yarnKey(m_piece);
+    if (settings().value(key).toBool())
+    {
+        return;
+    }
+    const QMap<QString, QString> ids = yarnsOfPiece(m_piece);
+    const QMap<QString, qreal> needed = yarnNeeded(m_piece);
+    QStringList lines;
+    for (auto it = needed.cbegin(); it != needed.cend(); ++it)
+    {
+        if (it.value() <= 0) continue;
+        if (const Yarn *y = m_inventory.find(ids.value(it.key())))
+        {
+            lines << tr("%1: about %2 m").arg(y->displayName()).arg(it.value(), 0, 'f', 0);
+        }
+    }
+    if (lines.isEmpty())
+    {
+        return;
+    }
+    settings().setValue(key, true);                  // asked once, until the piece is started again
+    const QString text = tr("%1 is finished. Take the yarn from the stock?\n\n%2").arg(m_job.pieces.at(m_piece).name, lines.join(QLatin1Char('\n')));
+    const bool yes = m_deductPrompt ? m_deductPrompt(text)
+                                    : QMessageBox::question(this, tr("Yarn"), text) == QMessageBox::Yes;
+    if (!yes)
+    {
+        return;
+    }
+    for (auto it = needed.cbegin(); it != needed.cend(); ++it)
+    {
+        if (Yarn *y = m_inventory.find(ids.value(it.key())))
+        {
+            consumeYarn(*y, qMin(it.value(), y->stockMeters()));
+        }
+    }
+    if (!m_yarnPath.isEmpty())
+    {
+        QString error;
+        if (!m_inventory.save(m_yarnPath, &error))
+        {
+            QMessageBox::warning(this, tr("Yarn"), tr("The yarn stock could not be saved: %1").arg(error));
+        }
+    }
+    updateView();
 }

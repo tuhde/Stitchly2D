@@ -7,7 +7,11 @@
 
 #include "../../stitchcore/instructions.h"
 #include "../../stitchcore/passes.h"
+#include <QMap>
+
+#include "../../stitchcore/project.h"
 #include "../../stitchcore/shaping.h"
+#include "../../stitchcore/yarn_estimate.h"
 
 /** Where the user's catalog (catalog.json) is kept. */
 QString userCatalogPath();
@@ -23,6 +27,8 @@ struct KnitPiece
     QVector<stitchcore::InstructionStep>      steps;
     /** What the machine does for each row, indexed like the instruction rows: 0 = cast on, 1..rowCount, rowCount + 1 = bind off. */
     QVector<stitchcore::RowPasses>            rowPasses;
+    /** The stitches of the piece by yarn slot, for the yarn estimate. */
+    QVector<stitchcore::YarnUse>              yarnUses;
 };
 
 struct KnitJob
@@ -30,6 +36,7 @@ struct KnitJob
     QString            input;            //!< the file that was opened (.sm2d or .stitchly)
     QString            patternFile;
     QVector<KnitPiece> pieces;
+    QMap<QString, stitchcore::YarnRef> yarns;    //!< yarns the project names, by slot; empty for a plain pattern
 };
 
 /**

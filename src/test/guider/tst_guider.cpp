@@ -3,6 +3,8 @@
 #include <QtTest>
 
 #include <QFileDialog>
+#include <QListWidget>
+#include <QTimer>
 #include <QLabel>
 #include <QPushButton>
 #include <QSettings>
@@ -17,6 +19,8 @@
 #include "../../app/guider/row_counter.h"
 #include "../../app/guider/simulated_row_counter.h"
 #include "../../app/guider/step_view.h"
+#include "../../app/guider/yarn_dialog.h"
+#include "../../libs/stitchcore/yarn.h"
 #include "../../libs/stitchcore/project.h"
 #include "../../libs/stitchload/core/application_2d.h"
 
@@ -30,7 +34,8 @@ namespace
 QString shirt() { return QStringLiteral(TEST_DATA_DIR "/patterns/male_shirt.sm2d"); }
 
 /** A project on the sample shirt: every piece knitted this way, and BackPanel with this pattern laid over it. */
-QString projectFile(const QTemporaryDir &dir, stitchcore::KnitMethod method, const QString &pattern = QString())
+QString projectFile(const QTemporaryDir &dir, stitchcore::KnitMethod method, const QString &pattern = QString(),
+                    const QMap<QString, stitchcore::YarnRef> &yarns = {})
 {
     using namespace stitchcore;
     Project project;
@@ -41,6 +46,7 @@ QString projectFile(const QTemporaryDir &dir, stitchcore::KnitMethod method, con
     band.stitchType = QString::fromLatin1(kDefaultStitchName);
     if (!pattern.isEmpty()) band.overlays.append(Overlay{pattern});
     project.bands.insert(QStringLiteral("BackPanel"), {band});
+    project.yarns = yarns;
     project.catalog = usedCatalog(StitchCatalog::withDefaults(), project.bands);
     const QString path = dir.path() + QStringLiteral("/test_%1.stitchly").arg(int(method));
     QString error;
@@ -54,6 +60,12 @@ class TstGuider : public QObject
     Q_OBJECT
 private slots:
     void init();
+    void yarnAskedOncePerPiece();
+    void yarnNotAskedWhenProjectNamesIt();
+    void yarnNotAskedWithoutInventory();
+    void yarnShownInTheBar();
+    void yarnDeductedWhenFinished();
+    void yarnMainFromOption();
     void opensPattern();
     void rowsAreClamped();
     void keysStepThroughRows();
@@ -96,6 +108,231 @@ private slots:
 void TstGuider::init()
 {
     QSettings(QStringLiteral("Stitchly2D"), QStringLiteral("guider")).clear();
+}
+
+namespace
+{
+stitchcore::Yarn testYarn(const QString &name, qreal meters, const QString &color = QStringLiteral("#c03030"))
+{
+    stitchcore::Yarn y;
+    y.id = stitchcore::Yarn::newId();
+    y.brand = QStringLiteral("Woolly");
+    y.name = name;
+    y.colorHex = color;
+    y.metersPerSkein = meters;
+    y.skeinsInStock = 1;
+    y.dyeLot = QStringLiteral("L7");
+    return y;
+}
+
+/** Answers the next yarn dialogs: row = entry to tap (0 = no yarn). Returns what it did, and never lets a test hang. */
+struct DialogWatch
+{
+    int  seen = 0;
+    int  row = 1;
+    bool answer = true;
+    QTimer timer;
+    DialogWatch()
+    {
+        timer.setInterval(20);
+        QObject::connect(&timer, &QTimer::timeout, [this]() {
+            QWidget *modal = QApplication::activeModalWidget();
+            if (!modal) return;
+            ++seen;
+            if (auto *dialog = qobject_cast<YarnDialog *>(modal))
+            {
+                auto *list = dialog->findChildren<QListWidget *>().first();
+                if (row >= 0) list->setCurrentRow(row);        // -1: keep what the dialog preselected
+                if (answer) dialog->accept(); else dialog->reject();
+            }
+            else
+            {
+                modal->close();
+            }
+        });
+        timer.start();
+    }
+};
+}
+
+void TstGuider::yarnAskedOncePerPiece()
+{
+    stitchcore::YarnInventory inv;
+    const QString a = inv.set(testYarn("A-yarn", 1000));
+    inv.set(testYarn("B-yarn", 1000));
+    GuideWindow w;
+    w.setYarnInventory(inv);
+    DialogWatch watch;
+    QVERIFY(w.openFile(shirt()));
+    QCOMPARE(watch.seen, 1);                                   // asked for the first piece
+    QCOMPARE(w.yarnsOfPiece(w.piece()).value("main"), a);       // row 1 = the first yarn of the inventory
+    w.setPiece(w.piece() + 1);
+    QCOMPARE(watch.seen, 2);
+    const int second = w.piece();
+    w.setPiece(second - 1);
+    QCOMPARE(watch.seen, 2);                                   // back to a piece that has its yarn: not asked again
+    // "without yarn" leaves the slot empty and does not ask again either
+    watch.answer = false;
+    w.setPiece(second + 1);
+    QCOMPARE(watch.seen, 3);
+    QVERIFY(w.yarnsOfPiece(w.piece()).isEmpty());
+    w.setPiece(second);
+    QCOMPARE(watch.seen, 3);
+    // the Yarn button asks again, with the last choice preselected
+    watch.answer = true;
+    watch.row = 2;
+    w.chooseYarn();
+    QCOMPARE(watch.seen, 4);
+    QCOMPARE(w.yarnInventory().yarns().at(1).id, w.yarnsOfPiece(w.piece()).value("main"));
+    // and the choice is remembered for the next time the file is opened
+    watch.timer.stop();
+    GuideWindow again;
+    again.setYarnInventory(inv);
+    DialogWatch second2;
+    second2.row = -1;
+    QVERIFY(again.openFile(shirt()));
+    QCOMPARE(second2.seen, 1);
+    QCOMPARE(again.yarnsOfPiece(again.piece()).value("main"), inv.yarns().at(1).id);
+}
+
+void TstGuider::yarnNotAskedWhenProjectNamesIt()
+{
+    QTemporaryDir dir;
+    stitchcore::YarnInventory inv;
+    const stitchcore::Yarn y = testYarn("Named", 100000);
+    inv.set(y);
+    inv.set(testYarn("Other", 100000));
+    GuideWindow w;
+    w.setYarnInventory(inv);
+    DialogWatch watch;
+    const QString file = projectFile(dir, stitchcore::KnitMethod::Flat, QString(),
+                                     {{QStringLiteral("main"), stitchcore::YarnRef{y.id, y.displayName(), y.colorHex}}});
+    QVERIFY(w.openFile(file));
+    QCOMPARE(watch.seen, 0);
+    QCOMPARE(w.yarnsOfPiece(w.piece()).value("main"), y.id);
+    // a project may name a yarn this computer does not have: the stored name is shown, nothing is asked
+    GuideWindow other;
+    DialogWatch watch2;
+    QVERIFY(other.openFile(file));
+    QCOMPARE(watch2.seen, 0);
+    auto *label = other.findChild<QLabel *>("yarnLabel");
+    QVERIFY(label->isVisible() || !label->text().isEmpty());
+    QVERIFY2(label->text().contains("Woolly Named"), qPrintable(label->text()));
+}
+
+void TstGuider::yarnNotAskedWithoutInventory()
+{
+    GuideWindow w;
+    DialogWatch watch;
+    QVERIFY(w.openFile(shirt()));
+    QCOMPARE(watch.seen, 0);
+    QVERIFY(w.findChild<QPushButton *>("yarnButton")->isHidden());
+    QVERIFY(w.findChild<QLabel *>("yarnLabel")->isHidden());
+    w.setYarnInventory([] { stitchcore::YarnInventory i; i.set(testYarn("x", 10)); return i; }());
+    w.setAskForYarn(false);
+    w.setPiece(w.piece() + 1);
+    QCOMPARE(watch.seen, 0);                                   // asking switched off (screenshots)
+}
+
+void TstGuider::yarnShownInTheBar()
+{
+    QTemporaryDir dir;
+    stitchcore::YarnInventory inv;
+    const stitchcore::Yarn a = testYarn("Alpha", 100000, "#ff0000");
+    const stitchcore::Yarn b = testYarn("Beta", 100000, "#0000ff");
+    inv.set(a);
+    inv.set(b);
+    GuideWindow w;
+    w.setYarnInventory(inv);
+    DialogWatch watch;
+    const QString file = projectFile(dir, stitchcore::KnitMethod::Flat, QStringLiteral("Stripes 2 rows"),
+                                     {{QStringLiteral("A"), {a.id, a.displayName(), a.colorHex}},
+                                      {QStringLiteral("B"), {b.id, b.displayName(), b.colorHex}}});
+    QVERIFY(w.openFile(file));
+    int back = -1;
+    for (int i = 0; i < w.job().pieces.size(); ++i) if (w.job().pieces.at(i).name == "BackPanel") back = i;
+    QVERIFY(back >= 0);
+    QCOMPARE(w.yarnSlots(back), QStringList({"A", "B"}));      // the stripes cover the whole piece: no main yarn
+    watch.seen = 0;
+    w.setPiece(back);
+    QCOMPARE(watch.seen, 0);                                   // both colors are named by the project
+    auto *label = w.findChild<QLabel *>("yarnLabel");
+    w.setRow(1);
+    QVERIFY(label->text().contains("Woolly Alpha") && !label->text().contains("Woolly Beta"));
+    QVERIFY(label->text().contains("#ff0000"));
+    QVERIFY(label->text().contains("lot L7"));
+    w.setRow(3);
+    QVERIFY(label->text().contains("Woolly Beta") && !label->text().contains("Woolly Alpha"));
+    // the estimate follows the yarns
+    const QMap<QString, qreal> need = w.yarnNeeded(back);
+    QVERIFY(need.value("A") > 0 && need.value("B") > 0);
+}
+
+void TstGuider::yarnDeductedWhenFinished()
+{
+    QTemporaryDir dir;
+    const QString yarnFile = dir.filePath("yarns.json");
+    stitchcore::YarnInventory inv;
+    const stitchcore::Yarn y = testYarn("Used", 100000);
+    inv.set(y);
+    QVERIFY(inv.save(yarnFile));
+    GuideWindow w;
+    QString error;
+    QVERIFY2(w.loadYarns(yarnFile, &error), qPrintable(error));
+    DialogWatch watch;
+    QStringList prompts;
+    bool answer = true;
+    w.setDeductPrompt([&](const QString &text) { prompts << text; return answer; });
+    const QString file = projectFile(dir, stitchcore::KnitMethod::Flat, QString(),
+                                     {{QStringLiteral("main"), {y.id, y.displayName(), y.colorHex}}});
+    QVERIFY(w.openFile(file));
+    const QString piece = w.job().pieces.at(w.piece()).name;
+    const qreal need = w.yarnNeeded(w.piece()).value("main");
+    QVERIFY(need > 0);
+    w.setRow(w.rowCount());
+    QVERIFY(prompts.isEmpty());                                // not finished yet
+    w.setRow(w.rowCount() + 1);                                // the bind-off
+    QCOMPARE(prompts.size(), 1);
+    QVERIFY(prompts.first().contains(piece));
+    stitchcore::YarnInventory saved;
+    QVERIFY(stitchcore::YarnInventory::load(yarnFile, saved, &error));
+    QVERIFY(qAbs(saved.find(y.id)->stockMeters() - (100000 - need)) < 1e-6);
+    w.setRow(w.rowCount());
+    w.setRow(w.rowCount() + 1);
+    QCOMPARE(prompts.size(), 1);                               // once per piece
+    // knitted again from the start: asked again; "no" leaves the stock alone
+    answer = false;
+    w.setRow(0);
+    w.setRow(w.rowCount() + 1);
+    QCOMPARE(prompts.size(), 2);
+    QVERIFY(stitchcore::YarnInventory::load(yarnFile, saved, &error));
+    QVERIFY(qAbs(saved.find(y.id)->stockMeters() - (100000 - need)) < 1e-6);
+    // an unreadable yarn file is not used and not overwritten
+    QFile bad(dir.filePath("bad.json"));
+    QVERIFY(bad.open(QIODevice::WriteOnly));
+    bad.write("not json");
+    bad.close();
+    GuideWindow w2;
+    QVERIFY(!w2.loadYarns(bad.fileName(), &error));
+    QVERIFY(w2.yarnInventory().yarns().isEmpty());
+}
+
+void TstGuider::yarnMainFromOption()
+{
+    stitchcore::YarnInventory inv;
+    inv.set(testYarn("Merino", 1000));
+    const QString id = inv.set(testYarn("Cotton", 1000));
+    GuideWindow w;
+    w.setYarnInventory(inv);
+    QString error;
+    QVERIFY(!w.setMainYarn("silk", &error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(!w.setMainYarn("woolly", &error));                 // matches both
+    QVERIFY(w.setMainYarn("cotton", &error));
+    DialogWatch watch;
+    QVERIFY(w.openFile(shirt()));
+    QCOMPARE(watch.seen, 0);                                   // the main yarn is settled
+    QCOMPARE(w.yarnsOfPiece(w.piece()).value("main"), id);
 }
 
 void TstGuider::opensPattern()

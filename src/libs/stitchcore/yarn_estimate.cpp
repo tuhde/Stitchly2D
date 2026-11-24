@@ -33,38 +33,58 @@ qreal yarnForStitches(const Yarn &yarn, const QString &stitchType, const StitchS
     return perStitch * stitches / 1000.0;
 }
 
-QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot,
-                                        const QString &defaultStitchType)
+QVector<YarnUse> yarnUses(const StitchGrid &grid, const QString &defaultStitchType)
 {
-    QMap<QString, qreal> meters;
+    QVector<YarnUse> uses;
     const QString mainSlot = QString::fromLatin1(kMainYarnSlot);
+    auto add = [&uses](const QString &slot, const QString &type, const StitchSize &size, int count) {
+        if (count <= 0) return;
+        for (YarnUse &u : uses)
+        {
+            if (u.slot == slot && u.stitchType == type && qFuzzyCompare(u.size.stitchWidthMm, size.stitchWidthMm))
+            {
+                u.stitches += count;
+                return;
+            }
+        }
+        uses.append(YarnUse{slot, type, size, count});
+    };
     for (const Row &row : grid.rows())
     {
         const GridBand &band = grid.bands().at(row.band);
-        const QString stitchType = band.stitchType == QLatin1String(kDefaultStitchName) ? defaultStitchType : band.stitchType;
+        const QString type = band.stitchType == QLatin1String(kDefaultStitchName) ? defaultStitchType : band.stitchType;
         int coloured = 0;
-        auto add = [&](const QString &slot, int count) {
-            auto it = yarnBySlot.constFind(slot);
-            if (it != yarnBySlot.constEnd())
-            {
-                meters[slot] += yarnForStitches(it.value(), stitchType, band.size, count);
-            }
-        };
         for (const Run &run : grid.overlayRuns(row.index))
         {
             if (!run.color.isEmpty())
             {
-                add(run.color, run.count);
+                add(run.color, type, band.size, run.count);
                 coloured += run.count;
             }
         }
-        add(mainSlot, qMax(0, row.count - coloured));
+        add(mainSlot, type, band.size, row.count - coloured);
     }
-    for (auto it = meters.begin(); it != meters.end(); ++it)
+    return uses;
+}
+
+QMap<QString, qreal> estimateYarnMeters(const QVector<YarnUse> &uses, const QMap<QString, Yarn> &yarnBySlot)
+{
+    QMap<QString, qreal> meters;
+    for (const YarnUse &u : uses)
     {
-        it.value() *= 1.0 + kYarnMargin;
+        auto it = yarnBySlot.constFind(u.slot);
+        if (it != yarnBySlot.constEnd())
+        {
+            meters[u.slot] += yarnForStitches(it.value(), u.stitchType, u.size, u.stitches) * (1.0 + kYarnMargin);
+        }
     }
     return meters;
+}
+
+QMap<QString, qreal> estimateYarnMeters(const StitchGrid &grid, const QMap<QString, Yarn> &yarnBySlot,
+                                        const QString &defaultStitchType)
+{
+    return estimateYarnMeters(yarnUses(grid, defaultStitchType), yarnBySlot);
 }
 
 bool suggestStitchSize(const Yarn &yarn, const QString &stitchType, StitchSize &size)
