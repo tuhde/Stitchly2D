@@ -127,8 +127,9 @@ MainWindow::MainWindow()
 
     if (!YarnInventory::load(userYarnPath(), m_yarnInventory, &m_yarnLoadError))
     {
-        m_yarnInventory = YarnInventory();      // not overwritten before the user has been asked, see editYarns()
+        m_yarnInventory = YarnInventory();      // not overwritten before the user has been asked, see commitYarns()
     }
+    m_yarnFileTime = QFileInfo(userYarnPath()).lastModified();
 
     m_scene = new VMainGraphicsScene(this);
     m_view = new VMainGraphicsView(this);
@@ -1699,32 +1700,69 @@ void MainWindow::updateYarnPanel()
     connect(edit, &QPushButton::clicked, this, &MainWindow::editYarns);
 }
 
+bool MainWindow::reloadYarnsIfChanged()
+{
+    const QFileInfo info(userYarnPath());
+    if (info.lastModified() == m_yarnFileTime && info.exists() == m_yarnFileTime.isValid())
+    {
+        return false;
+    }
+    YarnInventory fresh;
+    QString error;
+    const bool ok = YarnInventory::load(userYarnPath(), fresh, &error);
+    m_yarnFileTime = info.lastModified();
+    if (!ok)
+    {
+        m_yarnLoadError = error;                // keep what we have; saving asks first
+        return false;
+    }
+    setYarnInventory(fresh);
+    statusBar()->showMessage(tr("The yarn file changed and was read again."), 5000);
+    return true;
+}
+
+bool MainWindow::commitYarns(const YarnInventory &edited)
+{
+    const QFileInfo info(userYarnPath());
+    QString question;
+    if (!m_yarnLoadError.isEmpty())
+    {
+        question = tr("The yarn file %1 could not be read (%2). Saving replaces it. Save anyway?")
+                       .arg(userYarnPath(), m_yarnLoadError);
+    }
+    else if (info.lastModified() != m_yarnFileTime || info.exists() != m_yarnFileTime.isValid())
+    {
+        question = tr("The yarn file %1 changed while you edited, for example the guider took used yarn from the stock. "
+                      "Overwrite it with your changes?").arg(userYarnPath());
+    }
+    if (!question.isEmpty())
+    {
+        const bool yes = m_yarnPrompt ? m_yarnPrompt(question)
+                                      : QMessageBox::question(this, tr("Yarns"), question) == QMessageBox::Yes;
+        if (!yes) return false;
+    }
+    QDir().mkpath(info.absolutePath());
+    QString error;
+    if (!edited.save(userYarnPath(), &error))
+    {
+        QMessageBox::warning(this, tr("Yarns"), tr("The yarns could not be saved to %1: %2").arg(userYarnPath(), error));
+        return false;
+    }
+    m_yarnFileTime = QFileInfo(userYarnPath()).lastModified();
+    setYarnInventory(edited);
+    statusBar()->showMessage(tr("Yarns saved"), 5000);
+    return true;
+}
+
 void MainWindow::editYarns()
 {
+    reloadYarnsIfChanged();
     QStringList stitchTypes;
     for (const StitchType &t : m_catalog.basics().types()) stitchTypes << t.name;
     yarnui::YarnInventoryDialog dialog(m_yarnInventory, stitchTypes, this);
-    if (dialog.exec() != QDialog::Accepted)
+    if (dialog.exec() == QDialog::Accepted)
     {
-        return;
-    }
-    if (!m_yarnLoadError.isEmpty()
-        && QMessageBox::question(this, tr("Yarns"),
-                                 tr("The yarn file %1 could not be read (%2). Saving replaces it. Save anyway?")
-                                     .arg(userYarnPath(), m_yarnLoadError)) != QMessageBox::Yes)
-    {
-        return;
-    }
-    QDir().mkpath(QFileInfo(userYarnPath()).absolutePath());
-    QString error;
-    if (dialog.inventory().save(userYarnPath(), &error))
-    {
-        setYarnInventory(dialog.inventory());
-        statusBar()->showMessage(tr("Yarns saved"), 5000);
-    }
-    else
-    {
-        QMessageBox::warning(this, tr("Yarns"), tr("The yarns could not be saved to %1: %2").arg(userYarnPath(), error));
+        commitYarns(dialog.inventory());
     }
 }
 

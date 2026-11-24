@@ -81,6 +81,7 @@ private slots:
     void yarnPanel();
     void yarnInventoryEditor();
     void toolsYarns();
+    void yarnFileChangedMeanwhile();
 
 private:
     McpToolResult call(const QString &tool, const QJsonObject &args = QJsonObject())
@@ -1438,6 +1439,50 @@ void TstMainWindow::yarnInventoryEditor()
     QVERIFY(w.inventory().yarns().last().name.isEmpty());
     QVERIFY(!w.validate(&error));
     QVERIFY(!error.isEmpty());
+}
+
+void TstMainWindow::yarnFileChangedMeanwhile()
+{
+    const QString path = stitchcore::userYarnPath();
+    QFile::remove(path);
+    window->setYarnInventory(YarnInventory());
+    window->reloadYarnsIfChanged();                          // no file, nothing known: no change
+    int asked = 0;
+    bool answer = false;
+    window->setYarnPrompt([&](const QString &) { ++asked; return answer; });
+
+    YarnInventory mine;
+    mine.set(makeYarn("Mine", 100, false));
+    QVERIFY(window->commitYarns(mine));                      // no file yet: no question
+    QCOMPARE(asked, 0);
+    QVERIFY(!window->reloadYarnsIfChanged());                // our own write is no change
+
+    // another program (the guider) changes the file
+    QTest::qSleep(1100);
+    YarnInventory theirs = mine;
+    theirs.find(theirs.yarns().first().id)->skeinsInStock = 1;
+    QVERIFY(theirs.save(path));
+    QVERIFY(window->reloadYarnsIfChanged());
+    QCOMPARE(window->yarnInventory().yarns().first().skeinsInStock, 1);
+
+    // changed during the editing: asks, No keeps the file
+    QTest::qSleep(1100);
+    YarnInventory newer = theirs;
+    newer.find(newer.yarns().first().id)->skeinsInStock = 0;
+    QVERIFY(newer.save(path));
+    YarnInventory edited = mine;
+    answer = false;
+    QVERIFY(!window->commitYarns(edited));
+    QCOMPARE(asked, 1);
+    YarnInventory onDisk;
+    QVERIFY(YarnInventory::load(path, onDisk));
+    QCOMPARE(onDisk.yarns().first().skeinsInStock, 0);
+    answer = true;
+    QVERIFY(window->commitYarns(edited));
+    QCOMPARE(asked, 2);
+    QVERIFY(YarnInventory::load(path, onDisk));
+    QCOMPARE(onDisk, edited);
+    QFile::remove(path);
 }
 
 int main(int argc, char *argv[])

@@ -1457,6 +1457,14 @@ Maschen und Muster: Katalog &gt; Katalog bearbeiten.</translation>
         <source>The yarns could not be saved to %1: %2</source>
         <translation>Die Garne konnten nicht in %1 gespeichert werden: %2</translation>
     </message>
+    <message>
+        <source>The yarn file changed and was read again.</source>
+        <translation>Die Garndatei hat sich geändert und wurde neu gelesen.</translation>
+    </message>
+    <message>
+        <source>The yarn file %1 changed while you edited, for example the guider took used yarn from the stock. Overwrite it with your changes?</source>
+        <translation>Die Garndatei %1 hat sich während der Bearbeitung geändert, zum Beispiel weil der Guider verbrauchtes Garn vom Bestand abgezogen hat. Mit den eigenen Änderungen überschreiben?</translation>
+    </message>
 </context>
 <context>
     <name>McpIntegration</name>

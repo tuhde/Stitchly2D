@@ -4,6 +4,7 @@
 
 #include <functional>
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonObject>
 #include <QMainWindow>
@@ -116,6 +117,13 @@ public:
     /** The user's yarns (yarns.json). Replacing them here does not touch the file; the Yarns dialog saves it. */
     const stitchcore::YarnInventory &yarnInventory() const { return m_yarnInventory; }
     void setYarnInventory(const stitchcore::YarnInventory &inventory);
+    /** Reads yarns.json again if it changed since this window read or wrote it (the guider takes used yarn from the stock). True if it did. */
+    bool reloadYarnsIfChanged();
+    /** Saves the inventory to yarns.json and uses it. Asks before replacing a file that changed since it was read or that could not be read. */
+    bool commitYarns(const stitchcore::YarnInventory &edited);
+    /** Question before overwriting yarns.json; returns true for yes. Replaced by the tests. */
+    using YarnPrompt = std::function<bool(const QString &text)>;
+    void setYarnPrompt(const YarnPrompt &prompt) { m_yarnPrompt = prompt; }
     /** The yarn chosen for each slot ("main", or the color name of a color pattern). */
     QMap<QString, stitchcore::YarnRef> yarnRefs() const { return m_yarns; }
     /** Choose a yarn of the inventory for a slot; an empty id takes the yarn off the slot. */
@@ -247,6 +255,8 @@ private:
     QPushButton        *m_addOverlay = nullptr;
     QPushButton        *m_removeOverlay = nullptr;
     stitchcore::YarnInventory m_yarnInventory;
+    QDateTime           m_yarnFileTime;      //!< modification time of yarns.json when this window read or wrote it
+    YarnPrompt          m_yarnPrompt;
     QString             m_yarnLoadError;     //!< why yarns.json could not be read; it is then not overwritten without asking
     QMap<QString, stitchcore::YarnRef> m_yarns;   //!< by slot
     QDockWidget        *m_yarnDock = nullptr;
